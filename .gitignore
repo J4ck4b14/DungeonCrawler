@@ -1,0 +1,52 @@
+# Build artifacts
+/build/
+/out/
+/bin/
+/Debug/
+/Release/
+/x64/
+*.obj
+*.o
+*.exe
+*.pdb
+*.ilk
+*.idb
+*.log
+*.pch
+*.ipch
+*.tlog
+*.lastbuildstate
+*.vcxproj.user
+
+# CMake-generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Visual Studio generated
+.vscode/
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# Backup and cache
+*.user
+*.suo
+*.userosscache
+*.sdf
+*.opensdf
+
+# vcpkg
+vcpkg_installed/
+vcpkg_buildtrees/
+vcpkg_packages/
+
+# Misc
+*.DS_Store
+*.directory
+Thumbs.db
+*.swp
+*.bak
+*.old
