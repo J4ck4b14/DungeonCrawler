@@ -1,8 +1,8 @@
-# Install script for directory: D:/JAM/CPP/DungeonCrawler
+# Install script for directory: C:/Users/Juan/Documents/GitHub/DungeonCrawler
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "D:/JAM/CPP/DungeonCrawler/out/install/x64-debug")
+  set(CMAKE_INSTALL_PREFIX "C:/Users/Juan/Documents/GitHub/DungeonCrawler/out/install/x64-debug")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
@@ -34,7 +34,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("D:/JAM/CPP/DungeonCrawler/out/build/x64-debug/src/cmake_install.cmake")
+  include("C:/Users/Juan/Documents/GitHub/DungeonCrawler/out/build/x64-debug/src/cmake_install.cmake")
 endif()
 
 if(CMAKE_INSTALL_COMPONENT)
@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "D:/JAM/CPP/DungeonCrawler/out/build/x64-debug/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "C:/Users/Juan/Documents/GitHub/DungeonCrawler/out/build/x64-debug/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

@@ -1,8 +1,8 @@
-# Install script for directory: D:/JAM/CPP/DungeonCrawler/src
+# Install script for directory: C:/Users/Juan/Documents/GitHub/DungeonCrawler/src
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "D:/JAM/CPP/DungeonCrawler/out/install/x64-debug")
+  set(CMAKE_INSTALL_PREFIX "C:/Users/Juan/Documents/GitHub/DungeonCrawler/out/install/x64-debug")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
