@@ -42,7 +42,7 @@ struct GameStats {
 	}
 
 	void Print(const std::string& playerName, int playerLevel, int finalFloor, 
-		bool victory, int spellCount) const {
+		bool victory, int spellCount, int bestiaryCount = 0) const {
 
 		std::cout << "\n+==========================================+\n";
 		if (victory)
@@ -58,21 +58,22 @@ struct GameStats {
 		std::cout << "\n";
 
 		std::cout << "  -- Combat --\n";
-		std::cout << "  Enemies slain:     " << totalKills << "\n";
-		std::cout << "  Physical attacks:  " << physicalAttacks << "\n";
-		std::cout << "  Spells cast:       " << spellsCast << "\n";
-		std::cout << "  Preferred spell:   " << GetPreferredSpell() << "\n";
-		std::cout << "  Total spells known:" << spellCount << "\n";
-		std::cout << "  Damage dealt:      " << totalDamageDealt << "\n";
-		std::cout << "  Damage taken:      " << totalDamageTaken << "\n";
-		std::cout << "  Healing done:      " << totalHealing << "\n";
+		std::cout << "  Enemies slain:       " << totalKills << "\n";
+		std::cout << "  Bestiary entries:    " << bestiaryCount << "\n";
+		std::cout << "  Physical attacks:    " << physicalAttacks << "\n";
+		std::cout << "  Spells cast:         " << spellsCast << "\n";
+		std::cout << "  Preferred spell:     " << GetPreferredSpell() << "\n";
+		std::cout << "  Total spells known:  " << spellCount << "\n";
+		std::cout << "  Damage dealt:        " << totalDamageDealt << "\n";
+		std::cout << "  Damage taken:        " << totalDamageTaken << "\n";
+		std::cout << "  Healing done:        " << totalHealing << "\n";
 		std::cout << "\n";
 
 		std::cout << "  -- Exploration --\n";
-		std::cout << "  Rooms explored:    " << roomsExplored << "\n";
-		std::cout << "  Chests opened:     " << chestsOpened << "\n";
-		std::cout << "  Traps triggered:   " << trapsTriggered << "\n";
-		std::cout << "  Traps avoided:     " << trapsAvoided << "\n";
+		std::cout << "  Rooms explored:      " << roomsExplored << "\n";
+		std::cout << "  Chests opened:       " << chestsOpened << "\n";
+		std::cout << "  Traps triggered:     " << trapsTriggered << "\n";
+		std::cout << "  Traps avoided:       " << trapsAvoided << "\n";
 		std::cout << "\n+==========================================+\n\n";
 	}
 };

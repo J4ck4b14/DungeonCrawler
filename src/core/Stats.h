@@ -1,3 +1,15 @@
+// Stats.h
+// -------
+// Core stat block shared by all entities (players and enemies).
+// Contains both raw allocation points (hp, atk, speed, intelligence)
+// and derived values (maxHp, maxMana) computed by RecalculateDerived().
+//
+// Stat formulas:
+//   maxHp   = 20 + hp * 5      (base 20 HP, +5 per point)
+//   maxMana = intelligence * 3  (3 mana per INT point)
+//
+// ATK and Speed are set directly during character creation / enemy generation.
+
 #pragma once
 #include <string>
 #include <iostream>

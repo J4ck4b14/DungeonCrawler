@@ -1,3 +1,7 @@
+// RNG.cpp
+// -------
+// Implementation of the RNG utility.
+
 #include "RNG.h"
 
 RNG::RNG() {

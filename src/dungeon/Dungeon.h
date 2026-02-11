@@ -3,6 +3,7 @@
 #include "Encounter.h"
 #include "entities/Player.h"
 #include "core/GameStats.h"
+#include "core/Bestiary.h"
 #include <vector>
 #include <set>
 
@@ -15,6 +16,7 @@ public:
 
 	int GetCurrentLevel() const;
 	const GameStats& GetStats() const;
+	const Bestiary& GetBestiary() const;
 
 private:
 	int currentLevel_;
@@ -29,6 +31,7 @@ private:
 
 	// Persistent stats across the whole run
 	GameStats gameStats_;
+	Bestiary bestiary_;
 
 	// Floor generation
 	void GenerateFloor();
@@ -43,7 +46,7 @@ private:
 	void HandleTrap(Player& player, Room& room);
 
 	// Movement
-	bool PromptMovement(Player& player);
+	bool PromptMovement(Player& player); // Returns false if player found stairs & descends
 
 	// Map display
 	void PrintMap() const;

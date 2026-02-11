@@ -1,3 +1,9 @@
+// Enemy.cpp
+// ---------
+// Implementation of the Enemy class.
+// Contains the simple enemy AI (40% spell if available, 20% defend, else attack
+// with a random physical style) and the knowledge-tiered PrintStatus display.
+
 #include "Enemy.h"
 #include "utils/RNG.h"
 #include <iostream>
@@ -16,7 +22,6 @@ TurnAction Enemy::DecideTurn() {
 
 	// Simple AI: if we have spells and mana, 40% chance to cast; otherwise attack
 	if (!knownSpells_.empty()) {
-		// Find usable spells (enough mana)
 		std::vector<int> usable;
 		for (size_t i = 0; i < knownSpells_.size(); ++i) {
 			if (currentMana_ >= knownSpells_[i].manaCost) {
@@ -28,7 +33,15 @@ TurnAction Enemy::DecideTurn() {
 			int pick = usable[rng.NextInt(0, static_cast<int>(usable.size()) - 1)];
 			action.type = ActionType::CastSpell;
 			action.spellIndex = pick;
-			std::cout << "  " << name_ << " begins casting " << knownSpells_[pick].name << "!\n";
+			// Varied casting flavor
+			std::vector<std::string> castLines = {
+				name_ + " begins weaving dark energy...",
+				name_ + " mutters an incantation under their breath...",
+				name_ + "'s hands crackle with arcane power...",
+				name_ + " channels a spell!",
+				"A surge of magical energy radiates from " + name_ + "...",
+			};
+			std::cout << "  " << castLines[rng.NextInt(0, static_cast<int>(castLines.size()) - 1)] << "\n";
 			return action;
 		}
 	}
@@ -36,26 +49,51 @@ TurnAction Enemy::DecideTurn() {
 	// 20% chance to defend, 80% to attack
 	if (rng.Chance(0.2f)) {
 		action.type = ActionType::Defend;
-		std::cout << "  " << name_ << " braces for impact!\n";
+		// Pick a random stance — but DON'T reveal it
+		int stance = rng.NextInt(0, 3);
+		switch (stance) {
+		case 0: action.defenseStance = DefenseStance::AntiSlash; break;
+		case 1: action.defenseStance = DefenseStance::AntiThrust; break;
+		case 2: action.defenseStance = DefenseStance::AntiBash; break;
+		case 3: action.defenseStance = DefenseStance::AntiMagic; break;
+		}
+		// Vague defend flavor — never reveals what they're bracing for
+		std::vector<std::string> defLines = {
+			name_ + " raises their guard, watching carefully...",
+			name_ + " shifts into a defensive posture.",
+			name_ + " braces for your next move.",
+			name_ + " hunkers down and waits.",
+			name_ + " seems to be reading your movements...",
+			name_ + " tenses up, eyes locked on you.",
+		};
+		std::cout << "  " << defLines[rng.NextInt(0, static_cast<int>(defLines.size()) - 1)] << "\n";
 	}
 	else {
 		action.type = ActionType::Attack;
-		// Pick a random attack style
+		// Pick a random attack style — reveal is vague, don't say the style directly
 		int style = rng.NextInt(0, 2);
 		switch (style) {
 		case 0:
 			action.attackStyle = AttackStyle::Slash;
-			std::cout << "  " << name_ << " slashes at you!\n";
 			break;
 		case 1:
 			action.attackStyle = AttackStyle::Thrust;
-			std::cout << "  " << name_ << " thrusts precisely!\n";
 			break;
 		case 2:
 			action.attackStyle = AttackStyle::Bash;
-			std::cout << "  " << name_ << " winds up a heavy blow!\n";
 			break;
 		}
+		// Generic attack flavor — style is hidden
+		std::vector<std::string> atkLines = {
+			name_ + " lunges forward!",
+			name_ + " attacks!",
+			name_ + " closes in with violent intent!",
+			name_ + " makes a move!",
+			name_ + " strikes!",
+			name_ + " rushes at you!",
+			name_ + " charges with fury!",
+		};
+		std::cout << "  " << atkLines[rng.NextInt(0, static_cast<int>(atkLines.size()) - 1)] << "\n";
 	}
 
 	return action;

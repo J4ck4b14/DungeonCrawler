@@ -55,9 +55,11 @@ void Game::Run() {
 	Console::PrintSlow("TIP: Use Perception checks to scout rooms before entering!");
 	Console::PrintSlow("     Higher Intelligence = better perception rolls.");
 	Console::PrintSlow("     In combat, choose your attack style wisely:");
-	Console::PrintSlow("       Slash (balanced), Thrust (ignores defense), Bash (heavy hit)");
+	Console::PrintSlow("       Slash (reliable + crit), Thrust (anti-defense), Bash (risky power)");
+	Console::PrintSlow("     Defending halves damage and counterattacks!");
+	Console::PrintSlow("     Discover new enemies to fill your Bestiary for bonus XP.");
 	Console::PrintSlow("");
-
+ 
 	// -- Dungeon Loop --
 	Dungeon dungeon;
 
@@ -65,6 +67,7 @@ void Game::Run() {
 		bool survived = dungeon.RunFloor(player);
 
 		if (!survived) {
+			Console::WaitForEnter();
 			Console::Clear();
 			Console::PrintSlow("\n+==========================================+");
 			Console::PrintSlow("|              GAME OVER                   |");
@@ -76,7 +79,8 @@ void Game::Run() {
 			// Show final stats
 			dungeon.GetStats().Print(
 				playerName, player.GetLevel(), dungeon.GetCurrentLevel(),
-				false, static_cast<int>(player.GetKnownSpells().size()));
+				false, static_cast<int>(player.GetKnownSpells().size()),
+				dungeon.GetBestiary().GetEntryCount());
 
 			player.PrintStatus();
 			std::cout << "\nSpells known:\n";
@@ -107,6 +111,7 @@ void Game::Run() {
 		}
 
 		if (choice == 2) {
+			Console::WaitForEnter();
 			Console::Clear();
 			Console::PrintSlow("\n+==========================================+");
 			Console::PrintSlow("|             VICTORY!                     |");
@@ -118,7 +123,8 @@ void Game::Run() {
 			// Show final stats
 			dungeon.GetStats().Print(
 				playerName, player.GetLevel(), dungeon.GetCurrentLevel() - 1,
-				true, static_cast<int>(player.GetKnownSpells().size()));
+				true, static_cast<int>(player.GetKnownSpells().size()),
+				dungeon.GetBestiary().GetEntryCount());
 
 			player.PrintStatus();
 			std::cout << "\nSpells known:\n";

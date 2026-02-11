@@ -1,3 +1,9 @@
+// Player.cpp
+// ----------
+// Implementation of the Player class.
+// Handles character creation, level-up, XP, combat turn menu with
+// directional defense stance, attack style selection, and training system.
+
 #include "Player.h"
 #include <iostream>
 #include <limits>
@@ -125,23 +131,67 @@ int Player::GetLevel() const { return level_; }
 int Player::GetXPToNextLevel() const { return XPForLevel(level_); }
 int Player::GetRawHP() const { return rawHp_; }
 
+// -- Training system --
+int Player::GetTrainingPoints() const { return trainingPoints_; }
+bool Player::CanTrain() const { return trainingPoints_ < MAX_TRAINING; }
+
+// -- Death save counter --
+int Player::GetDeathSaveCount() const { return deathSaveCount_; }
+void Player::IncrementDeathSave() { deathSaveCount_++; }
+
+void Player::TrainStat(int statChoice) {
+	if (!CanTrain()) return;
+	trainingPoints_++;
+	switch (statChoice) {
+	case 1: // Health
+		rawHp_++;
+		stats_.hp = rawHp_;
+		stats_.RecalculateDerived();
+		currentHp_ = std::min(currentHp_ + 5, stats_.maxHp); // Gain the 5 HP immediately
+		std::cout << "  You train your endurance. +5 max HP!\n";
+		break;
+	case 2: // Attack
+		stats_.atk += 1;
+		std::cout << "  You practice combat drills. +1 ATK!\n";
+		break;
+	case 3: // Speed
+		stats_.speed += 1;
+		std::cout << "  You work on your footwork. +1 SPD!\n";
+		break;
+	case 4: // Intelligence
+		stats_.intelligence += 1;
+		stats_.RecalculateDerived();
+		currentMana_ = std::min(currentMana_ + 3, stats_.maxMana);
+		std::cout << "  You meditate and expand your mind. +1 INT, +3 max Mana!\n";
+		break;
+	}
+}
+
 TurnAction Player::DecideTurn() {
 	TurnAction action;
 	int choice = 0;
 
+	// Show buff status if active
+	if (attackBuff_.remainingHits > 0) {
+		std::cout << "  [BUFF: +" << attackBuff_.bonusDamage
+			<< (attackBuff_.isMagical ? " spell" : " physical")
+			<< " dmg, " << attackBuff_.remainingHits << " hits left]\n";
+	}
+
 	std::cout << "\n" << name_ << "'s turn:\n"
 		<< "  1. Attack\n"
-		<< "  2. Defend\n"
+		<< "  2. Defend (choose stance)\n"
 		<< "  3. Cast Spell\n"
 		<< "  4. Use Item\n"
 		<< "  5. Inspect Enemy\n"
+		<< "  6. Bestiary\n"
 		<< "  > ";
 	std::cin >> choice;
 
-	while (std::cin.fail() || choice < 1 || choice > 5) {
+	while (std::cin.fail() || choice < 1 || choice > 6) {
 		std::cin.clear();
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		std::cout << "  Invalid. Enter 1-5: ";
+		std::cout << "  Invalid. Enter 1-6: ";
 		std::cin >> choice;
 	}
 
@@ -149,9 +199,9 @@ TurnAction Player::DecideTurn() {
 	case 1: {
 		action.type = ActionType::Attack;
 		std::cout << "  Choose attack style:\n";
-		std::cout << "    1. Slash  (balanced, 1.0x ATK)\n";
-		std::cout << "    2. Thrust (precise, 0.8x ATK, ignores defense)\n";
-		std::cout << "    3. Bash   (heavy, 1.3x ATK)\n";
+		std::cout << "    1. Slash  (1.0x ATK, 15% crit for 1.5x)\n";
+		std::cout << "    2. Thrust (0.8x ATK, ignores defense; 1.0x vs defenders)\n";
+		std::cout << "    3. Bash   (1.3x ATK, 15% whiff + self-damage)\n";
 		std::cout << "    > ";
 		int atkChoice = 0;
 		std::cin >> atkChoice;
@@ -177,10 +227,42 @@ TurnAction Player::DecideTurn() {
 		}
 		break;
 	}
-	case 2:
+	case 2: {
 		action.type = ActionType::Defend;
-		std::cout << "  " << name_ << " braces for impact!\n";
+		std::cout << "  Choose defense stance (parry if you guess right!):\n";
+		std::cout << "    1. Brace vs Slash\n";
+		std::cout << "    2. Brace vs Thrust\n";
+		std::cout << "    3. Brace vs Bash\n";
+		std::cout << "    4. Brace vs Magic\n";
+		std::cout << "    > ";
+		int defChoice = 0;
+		std::cin >> defChoice;
+		while (std::cin.fail() || defChoice < 1 || defChoice > 4) {
+			std::cin.clear();
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			std::cout << "    Invalid. Enter 1-4: ";
+			std::cin >> defChoice;
+		}
+		switch (defChoice) {
+		case 1:
+			action.defenseStance = DefenseStance::AntiSlash;
+			std::cout << "  " << name_ << " braces against slashing attacks!\n";
+			break;
+		case 2:
+			action.defenseStance = DefenseStance::AntiThrust;
+			std::cout << "  " << name_ << " braces against thrusting attacks!\n";
+			break;
+		case 3:
+			action.defenseStance = DefenseStance::AntiBash;
+			std::cout << "  " << name_ << " braces against heavy blows!\n";
+			break;
+		case 4:
+			action.defenseStance = DefenseStance::AntiMagic;
+			std::cout << "  " << name_ << " focuses to resist magic!\n";
+			break;
+		}
 		break;
+	}
 	case 3: {
 		if (knownSpells_.empty()) {
 			std::cout << "  You don't know any spells! Attacking instead.\n";
@@ -235,6 +317,10 @@ TurnAction Player::DecideTurn() {
 	}
 	case 5:
 		action.type = ActionType::Inspect;
+		break;
+	case 6:
+		action.type = ActionType::UseItem;
+		action.itemIndex = -2; // Bestiary signal
 		break;
 	}
 

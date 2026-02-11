@@ -1,3 +1,16 @@
+// EnemyFactory.cpp
+// -----------------
+// Creates enemies from tiered templates based on dungeon level.
+//
+// Templates are organized into 4 tiers:
+//   Tier 1 (Level 1+): Slime, Rat, Skeleton, Spider, Goblin
+//   Tier 2 (Level 3+): Bandit, Orc, Ghost, Witch
+//   Tier 3 (Level 5+): Troll, Werewolf, Vampire, Dark Mage
+//   Tier 4 (Level 8+): Demon, Giant, Dragon
+//
+// Each template defines stat ranges, spells, weakness element, and base XP.
+// Stats scale by 8% per dungeon level above 1.
+
 #include "EnemyFactory.h"
 #include "utils/RNG.h"
 #include "combat/Spell.h"

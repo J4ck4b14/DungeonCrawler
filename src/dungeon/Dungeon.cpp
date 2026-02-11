@@ -13,6 +13,7 @@ Dungeon::Dungeon() : currentLevel_(1), gridSize_(0), playerX_(0), playerY_(0) {}
 
 int Dungeon::GetCurrentLevel() const { return currentLevel_; }
 const GameStats& Dungeon::GetStats() const { return gameStats_; }
+const Bestiary& Dungeon::GetBestiary() const { return bestiary_; }
 
 RoomContent Dungeon::GenerateRoomContent(bool isStart, bool isStaircase) {
 	if (isStart) return RoomContent::Empty;
@@ -174,7 +175,7 @@ void Dungeon::PrintMap() const {
 
 void Dungeon::HandleCombat(Player& player) {
 	Enemy enemy = EnemyFactory::CreateEnemy(currentLevel_);
-	CombatSystem::ResolveCombat(player, enemy, seenEnemyTypes_, gameStats_);
+	CombatSystem::ResolveCombat(player, enemy, seenEnemyTypes_, gameStats_, bestiary_);
 }
 
 void Dungeon::HandleChest(Player& player) {
@@ -207,14 +208,96 @@ void Dungeon::HandleChest(Player& player) {
 }
 
 void Dungeon::HandleRest(Player& player) {
-	int hpRestore = 5 + currentLevel_;
-	int manaRestore = 3 + currentLevel_ / 2;
-	player.Heal(hpRestore);
-	player.RestoreMana(manaRestore);
-	Console::PrintSlow("  You find a quiet spot and rest.");
-	Console::PrintSlow("  Restored " + std::to_string(hpRestore) + " HP and "
-		+ std::to_string(manaRestore) + " Mana.");
-	player.PrintStatus();
+	Console::PrintSlow("  You find a quiet alcove. What do you do?");
+	std::cout << "\n";
+	std::cout << "    1. Rest (restore HP and Mana)\n";
+
+	bool canTrain = player.CanTrain();
+	if (canTrain)
+		std::cout << "    2. Train (permanent +1 stat, " << player.GetTrainingPoints() << "/3 used)\n";
+	else
+		std::cout << "    2. Train (MAXED OUT - 3/3)\n";
+
+	std::cout << "    3. Sharpen weapon (bonus physical damage for next few attacks)\n";
+	std::cout << "    4. Study the arcane (bonus spell damage for next few casts)\n";
+	std::cout << "  > ";
+
+	int choice = 0;
+	std::cin >> choice;
+	while (std::cin.fail() || choice < 1 || choice > 4) {
+		std::cin.clear();
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		std::cout << "  Invalid. Enter 1-4: ";
+		std::cin >> choice;
+	}
+
+	static RNG rng;
+
+	switch (choice) {
+	case 1: {
+		// Rest: restore HP and Mana
+		int hpRestore = 5 + currentLevel_;
+		int manaRestore = 3 + currentLevel_ / 2;
+		player.Heal(hpRestore);
+		player.RestoreMana(manaRestore);
+		Console::PrintSlow("  You rest and recover.");
+		Console::PrintSlow("  Restored " + std::to_string(hpRestore) + " HP and "
+			+ std::to_string(manaRestore) + " Mana.");
+		break;
+	}
+	case 2: {
+		// Train: permanent stat boost (capped)
+		if (!canTrain) {
+			Console::PrintSlow("  You've trained as much as your body allows (3/3).");
+			Console::PrintSlow("  You rest instead.");
+			int hpRestore = 5 + currentLevel_;
+			int manaRestore = 3 + currentLevel_ / 2;
+			player.Heal(hpRestore);
+			player.RestoreMana(manaRestore);
+			Console::PrintSlow("  Restored " + std::to_string(hpRestore) + " HP and "
+				+ std::to_string(manaRestore) + " Mana.");
+			break;
+		}
+		std::cout << "  Choose a stat to train:\n";
+		std::cout << "    1. Health (+5 max HP)\n";
+		std::cout << "    2. Attack (+1 ATK)\n";
+		std::cout << "    3. Speed  (+1 SPD)\n";
+		std::cout << "    4. Intelligence (+1 INT, +3 max Mana)\n";
+		std::cout << "  > ";
+		int stat = 0;
+		std::cin >> stat;
+		while (std::cin.fail() || stat < 1 || stat > 4) {
+			std::cin.clear();
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			std::cout << "  Invalid. Enter 1-4: ";
+			std::cin >> stat;
+		}
+		player.TrainStat(stat);
+		Console::PrintSlow("  You skip rest to push yourself. Training complete.");
+		player.PrintStatus();
+		break;
+	}
+	case 3: {
+		// Sharpen weapon: temporary physical attack buff
+		int bonus = rng.NextInt(2, 5);
+		int hits = rng.NextInt(3, 7);
+		player.ApplyAttackBuff(bonus, hits, false);
+		Console::PrintSlow("  You sharpen your weapon on the stone walls.");
+		Console::PrintSlow("  +" + std::to_string(bonus)
+			+ " physical damage for the next " + std::to_string(hits) + " attacks!");
+		break;
+	}
+	case 4: {
+		// Study the arcane: temporary spell damage buff
+		int bonus = rng.NextInt(2, 5);
+		int hits = rng.NextInt(3, 7);
+		player.ApplyAttackBuff(bonus, hits, true);
+		Console::PrintSlow("  You meditate and focus your magical energy.");
+		Console::PrintSlow("  +" + std::to_string(bonus)
+			+ " spell damage for the next " + std::to_string(hits) + " casts!");
+		break;
+	}
+	}
 }
 
 void Dungeon::HandleTrap(Player& player, Room& room) {
@@ -277,6 +360,7 @@ void Dungeon::HandleRoomContent(Player& player, Room& room) {
 	switch (room.content) {
 	case RoomContent::Combat:
 		Console::PrintSlow("  Something stirs in the shadows...");
+		Console::WaitForEnter();
 		HandleCombat(player);
 		break;
 	case RoomContent::Chest:
@@ -307,6 +391,7 @@ void Dungeon::EnterRoom(Player& player) {
 	Room& room = grid_[playerY_][playerX_];
 	room.visited = true;
 
+	Console::WaitForEnter();
 	Console::Clear();
 	Console::PrintSlow("\n-- Room (" + std::to_string(room.x) + ", "
 		+ std::to_string(room.y) + ") --");
@@ -370,6 +455,11 @@ bool Dungeon::PromptMovement(Player& player) {
 			optNum++;
 		}
 
+		// Bestiary is always available
+		int bestiaryOpt = optNum;
+		std::cout << "    " << optNum << ". Bestiary (" << bestiary_.GetEntryCount() << " entries)\n";
+		optNum++;
+
 		std::cout << "  > ";
 		int choice = 0;
 		std::cin >> choice;
@@ -418,6 +508,12 @@ bool Dungeon::PromptMovement(Player& player) {
 			continue;
 		}
 
+		// After inventory check, before descend check:
+		if (choice == bestiaryOpt) {
+			bestiary_.Print();
+			continue;
+		}
+
 		if (descOpt > 0 && choice == descOpt) {
 			current.contentResolved = true;
 			return true;
@@ -433,6 +529,7 @@ bool Dungeon::RunFloor(Player& player) {
 	GenerateFloor();
 	seenEnemyTypes_.clear();
 
+	Console::WaitForEnter();
 	Console::Clear();
 	Console::PrintSlow("\n+======================================+");
 	std::string floorLine = "|       DUNGEON FLOOR " + std::to_string(currentLevel_);
@@ -454,6 +551,7 @@ bool Dungeon::RunFloor(Player& player) {
 	if (!player.IsAlive()) return false;
 
 	if (descended) {
+		Console::WaitForEnter();
 		Console::Clear();
 		Console::PrintSlow("\n==================================");
 		Console::PrintSlow("  Floor " + std::to_string(currentLevel_) + " cleared!");

@@ -1,3 +1,17 @@
+// Item.h
+// ------
+// Defines consumable items (potions) that players can find in chests
+// and use during combat or exploration.
+//
+// ItemType: HealthPotion (restores HP), ManaPotion (restores Mana).
+// Each item has a name, type, and potency (amount restored).
+//
+// Factory functions create predefined items:
+//   MakeHealthPotion()      -> 10 HP
+//   MakeLargeHealthPotion() -> 20 HP
+//   MakeManaPotion()        -> 6 Mana
+//   MakeLargeManaPotion()   -> 12 Mana
+
 #pragma once
 #include <string>
 #include <iostream>

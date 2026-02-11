@@ -1,3 +1,11 @@
+// Inventory.h
+// -----------
+// Simple item container for the player. Stores consumable items (potions)
+// found in chests. Items can be listed, used (consuming them), or counted.
+//
+// UseItem() applies the item's effect directly to the provided hp/mana
+// references, then removes the item from the inventory.
+
 #pragma once
 #include "Item.h"
 #include <vector>

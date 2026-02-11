@@ -1,8 +1,8 @@
-# Install script for directory: C:/Users/Juan/Documents/GitHub/DungeonCrawler/src
+# Install script for directory: D:/JAM/Github/DungeonCrawler/src
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "C:/Users/Juan/Documents/GitHub/DungeonCrawler/out/install/x64-debug")
+  set(CMAKE_INSTALL_PREFIX "D:/JAM/Github/DungeonCrawler/out/install/x64-debug")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
@@ -32,3 +32,9 @@ if(NOT DEFINED CMAKE_CROSSCOMPILING)
   set(CMAKE_CROSSCOMPILING "FALSE")
 endif()
 
+string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
+       "${CMAKE_INSTALL_MANIFEST_FILES}")
+if(CMAKE_INSTALL_LOCAL_ONLY)
+  file(WRITE "D:/JAM/Github/DungeonCrawler/out/build/x64-debug/src/install_local_manifest.txt"
+     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
+endif()
