@@ -1,160 +1,489 @@
-#include "Dungeon.h"
+ï»¿#include "Dungeon.h"
+#include "Perception.h"
 #include "entities/EnemyFactory.h"
 #include "combat/CombatSystem.h"
 #include "items/Item.h"
 #include "utils/RNG.h"
+#include "utils/Console.h"
 #include <iostream>
+#include <limits>
+#include <algorithm>
 
-Dungeon::Dungeon() : currentLevel_(1) {}
+Dungeon::Dungeon() : currentLevel_(1), gridSize_(0), playerX_(0), playerY_(0) {}
 
 int Dungeon::GetCurrentLevel() const { return currentLevel_; }
+const GameStats& Dungeon::GetStats() const { return gameStats_; }
 
-Encounter Dungeon::GenerateEncounter() {
+RoomContent Dungeon::GenerateRoomContent(bool isStart, bool isStaircase) {
+	if (isStart) return RoomContent::Empty;
+	if (isStaircase) return RoomContent::Staircase;
+
 	static RNG rng;
 	int roll = rng.NextInt(1, 100);
 
-	// Probabilities shift with level — deeper floors are more dangerous
-	int combatChance = 45 + currentLevel_ * 2;   // 47% at L1, up to ~65% at L10
-	int chestChance = 20;
-	int trapChance = 10 + currentLevel_;          // Traps increase with depth
-	int restChance = 15 - currentLevel_;          // Rest becomes rarer
-	if (restChance < 3) restChance = 3;
+	int combatChance = 40 + currentLevel_ * 2;
+	int chestChance = 15;
+	int trapChance = 8 + currentLevel_;
+	int restChance = 12 - currentLevel_;
+	if (restChance < 2) restChance = 2;
 
-	// Normalize by checking cumulative ranges
-	if (roll <= combatChance) {
-		return {EncounterType::Combat, "You hear growling ahead..."};
-	}
+	if (roll <= combatChance) return RoomContent::Combat;
 	roll -= combatChance;
-	if (roll <= chestChance) {
-		return {EncounterType::Chest, "You spot a dusty chest in the corner!"};
-	}
+	if (roll <= chestChance) return RoomContent::Chest;
 	roll -= chestChance;
-	if (roll <= trapChance) {
-		return {EncounterType::Trap, "The ground shifts beneath your feet!"};
-	}
+	if (roll <= trapChance) return RoomContent::Trap;
 	roll -= trapChance;
-	if (roll <= restChance) {
-		return {EncounterType::Rest, "You find a quiet alcove to catch your breath."};
+	if (roll <= restChance) return RoomContent::Rest;
+	return RoomContent::Empty;
+}
+
+void Dungeon::GenerateFloor() {
+	static RNG rng;
+
+	gridSize_ = 4 + (currentLevel_ - 1) / 3;
+	if (gridSize_ > 8) gridSize_ = 8;
+
+	grid_.clear();
+	grid_.resize(gridSize_, std::vector<Room>(gridSize_));
+
+	int startEdge = rng.NextInt(0, 3);
+	switch (startEdge) {
+	case 0: playerX_ = rng.NextInt(0, gridSize_ - 1); playerY_ = 0; break;
+	case 1: playerX_ = gridSize_ - 1; playerY_ = rng.NextInt(0, gridSize_ - 1); break;
+	case 2: playerX_ = rng.NextInt(0, gridSize_ - 1); playerY_ = gridSize_ - 1; break;
+	case 3: playerX_ = 0; playerY_ = rng.NextInt(0, gridSize_ - 1); break;
 	}
-	return {EncounterType::Nothing, "An empty corridor stretches before you."};
+
+	int stairX, stairY;
+	do {
+		stairX = rng.NextInt(0, gridSize_ - 1);
+		stairY = rng.NextInt(0, gridSize_ - 1);
+	} while (std::abs(stairX - playerX_) + std::abs(stairY - playerY_) < gridSize_);
+
+	for (int y = 0; y < gridSize_; ++y) {
+		for (int x = 0; x < gridSize_; ++x) {
+			Room& room = grid_[y][x];
+			room.x = x;
+			room.y = y;
+			bool isStart = (x == playerX_ && y == playerY_);
+			bool isStair = (x == stairX && y == stairY);
+			room.content = GenerateRoomContent(isStart, isStair);
+		}
+	}
+
+	// Guaranteed path from start to staircase
+	{
+		int cx = playerX_, cy = playerY_;
+		while (cx != stairX || cy != stairY) {
+			Direction dir;
+			if (cx != stairX && cy != stairY) {
+				if (rng.Chance(0.5f))
+					dir = (stairX > cx) ? Direction::East : Direction::West;
+				else
+					dir = (stairY > cy) ? Direction::South : Direction::North;
+			}
+			else if (cx != stairX)
+				dir = (stairX > cx) ? Direction::East : Direction::West;
+			else
+				dir = (stairY > cy) ? Direction::South : Direction::North;
+
+			grid_[cy][cx].SetExit(dir, true);
+			switch (dir) {
+			case Direction::North: cy--; break;
+			case Direction::South: cy++; break;
+			case Direction::East:  cx++; break;
+			case Direction::West:  cx--; break;
+			}
+			grid_[cy][cx].SetExit(OppositeDirection(dir), true);
+		}
+	}
+
+	// Random extra connections
+	for (int y = 0; y < gridSize_; ++y) {
+		for (int x = 0; x < gridSize_; ++x) {
+			if (x + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::East)) {
+				if (rng.Chance(0.35f)) {
+					grid_[y][x].SetExit(Direction::East, true);
+					grid_[y][x + 1].SetExit(Direction::West, true);
+				}
+			}
+			if (y + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::South)) {
+				if (rng.Chance(0.35f)) {
+					grid_[y][x].SetExit(Direction::South, true);
+					grid_[y + 1][x].SetExit(Direction::North, true);
+				}
+			}
+		}
+	}
+
+	grid_[playerY_][playerX_].visited = true;
+	grid_[playerY_][playerX_].contentResolved = true;
+}
+
+void Dungeon::PrintMap() const {
+	std::cout << "\n  MAP (Level " << currentLevel_ << "):\n";
+	std::cout << "  Legend: @ = You  ? = Unvisited  V = Staircase\n\n";
+
+	for (int y = 0; y < gridSize_; ++y) {
+		std::cout << "  ";
+		for (int x = 0; x < gridSize_; ++x) {
+			std::cout << "+";
+			if (grid_[y][x].HasExit(Direction::North) && y > 0) {
+				if (grid_[y][x].visited || grid_[y - 1][x].visited)
+					std::cout << "  ";
+				else
+					std::cout << "--";
+			}
+			else {
+				std::cout << "--";
+			}
+		}
+		std::cout << "+\n";
+
+		std::cout << "  ";
+		for (int x = 0; x < gridSize_; ++x) {
+			if (grid_[y][x].HasExit(Direction::West) && x > 0) {
+				if (grid_[y][x].visited || grid_[y][x - 1].visited)
+					std::cout << " ";
+				else
+					std::cout << "|";
+			}
+			else {
+				std::cout << "|";
+			}
+
+			if (x == playerX_ && y == playerY_)
+				std::cout << "@ ";
+			else if (grid_[y][x].visited) {
+				if (grid_[y][x].content == RoomContent::Staircase && !grid_[y][x].contentResolved)
+					std::cout << "V ";
+				else
+					std::cout << "  ";
+			}
+			else
+				std::cout << "? ";
+		}
+		std::cout << "|\n";
+	}
+
+	std::cout << "  ";
+	for (int x = 0; x < gridSize_; ++x)
+		std::cout << "+--";
+	std::cout << "+\n\n";
+}
+
+void Dungeon::HandleCombat(Player& player) {
+	Enemy enemy = EnemyFactory::CreateEnemy(currentLevel_);
+	CombatSystem::ResolveCombat(player, enemy, seenEnemyTypes_, gameStats_);
 }
 
 void Dungeon::HandleChest(Player& player) {
 	static RNG rng;
 	int roll = rng.NextInt(1, 100);
 
-	std::cout << "  You open the chest...\n";
+	gameStats_.chestsOpened++;
+	Console::PrintSlow("  You find a chest and pry it open...");
 
-	if (roll <= 35) {
-		Item potion = MakeHealthPotion();
-		if (currentLevel_ >= 5) potion = MakeLargeHealthPotion();
+	if (roll <= 30) {
+		Item potion = (currentLevel_ >= 5) ? MakeLargeHealthPotion() : MakeHealthPotion();
 		player.GetInventory().AddItem(potion);
-		std::cout << "  Found: " << potion.name << "!\n";
+		Console::PrintSlow("  Found: " + potion.name + "!");
 	}
-	else if (roll <= 65) {
-		Item potion = MakeManaPotion();
-		if (currentLevel_ >= 5) potion = MakeLargeManaPotion();
+	else if (roll <= 55) {
+		Item potion = (currentLevel_ >= 5) ? MakeLargeManaPotion() : MakeManaPotion();
 		player.GetInventory().AddItem(potion);
-		std::cout << "  Found: " << potion.name << "!\n";
+		Console::PrintSlow("  Found: " + potion.name + "!");
 	}
-	else if (roll <= 85) {
-		// Find both
+	else if (roll <= 80) {
 		Item hp = MakeHealthPotion();
 		Item mp = MakeManaPotion();
 		player.GetInventory().AddItem(hp);
 		player.GetInventory().AddItem(mp);
-		std::cout << "  Jackpot! Found: " << hp.name << " and " << mp.name << "!\n";
+		Console::PrintSlow("  Jackpot! Found: " + hp.name + " and " + mp.name + "!");
 	}
 	else {
-		std::cout << "  The chest is empty. How disappointing.\n";
+		Console::PrintSlow("  The chest is empty. How disappointing.");
 	}
 }
 
 void Dungeon::HandleRest(Player& player) {
-	int hpRestore = 10 + currentLevel_ * 2;
-	int manaRestore = 5 + currentLevel_;
+	int hpRestore = 5 + currentLevel_;
+	int manaRestore = 3 + currentLevel_ / 2;
 	player.Heal(hpRestore);
 	player.RestoreMana(manaRestore);
-	std::cout << "  You rest and recover " << hpRestore << " HP and "
-		<< manaRestore << " Mana.\n";
+	Console::PrintSlow("  You find a quiet spot and rest.");
+	Console::PrintSlow("  Restored " + std::to_string(hpRestore) + " HP and "
+		+ std::to_string(manaRestore) + " Mana.");
 	player.PrintStatus();
 }
 
-void Dungeon::HandleTrap(Player& player) {
+void Dungeon::HandleTrap(Player& player, Room& room) {
 	static RNG rng;
-	int dmg = rng.NextInt(5, 10) + currentLevel_ * 2;
-	player.ReceiveDamage(dmg);
-	std::cout << "  A trap! You take " << dmg << " damage!\n";
-	if (!player.IsAlive()) {
-		std::cout << "  The trap proved fatal...\n";
+
+	bool warned = false;
+	for (int d = 0; d < 4; ++d) {
+		Direction checkDir = static_cast<Direction>(d);
+		int adjX = room.x, adjY = room.y;
+		switch (checkDir) {
+		case Direction::North: adjY--; break;
+		case Direction::South: adjY++; break;
+		case Direction::East:  adjX++; break;
+		case Direction::West:  adjX--; break;
+		}
+		if (adjX < 0 || adjX >= gridSize_ || adjY < 0 || adjY >= gridSize_) continue;
+
+		const Room& adjRoom = grid_[adjY][adjX];
+		for (const auto& hint : adjRoom.hints) {
+			if (hint.revealsContent && hint.revealedContent == RoomContent::Trap &&
+				hint.direction == OppositeDirection(checkDir)) {
+				warned = true;
+				break;
+			}
+		}
+		if (warned) break;
+	}
+
+	if (warned) {
+		gameStats_.trapsAvoided++;
+		Console::PrintSlow("  You recall the trap you sensed earlier and carefully step around it!");
+		Console::PrintSlow("  The trap is disarmed - your perception saved you.");
 	}
 	else {
-		player.PrintStatus();
+		gameStats_.trapsTriggered++;
+		int dmg = rng.NextInt(3, 6) + currentLevel_;
+		player.ReceiveDamage(dmg);
+		gameStats_.totalDamageTaken += dmg;
+		Console::PrintSlow("  A trap springs! You take " + std::to_string(dmg) + " damage!");
+		if (!player.IsAlive()) {
+			Console::PrintSlow("  The trap proved fatal...");
+		}
+		else {
+			player.PrintStatus();
+		}
 	}
 }
 
-void Dungeon::HandleEncounter(Player& player, const Encounter& encounter) {
-	std::cout << "\n" << encounter.description << "\n";
+void Dungeon::AwardExplorationXP(Player& player) {
+	int xp = 2 + currentLevel_;
+	player.GainXP(xp);
+}
 
-	switch (encounter.type) {
-	case EncounterType::Combat: {
-		Enemy enemy = EnemyFactory::CreateEnemy(currentLevel_);
-		bool won = CombatSystem::ResolveCombat(player, enemy);
-		if (!won) return; // Player died
-		break;
+void Dungeon::HandleRoomContent(Player& player, Room& room) {
+	if (room.contentResolved) {
+		std::cout << "  This room has already been cleared.\n";
+		return;
 	}
-	case EncounterType::Chest:
+
+	switch (room.content) {
+	case RoomContent::Combat:
+		Console::PrintSlow("  Something stirs in the shadows...");
+		HandleCombat(player);
+		break;
+	case RoomContent::Chest:
 		HandleChest(player);
 		break;
-	case EncounterType::Rest:
+	case RoomContent::Rest:
 		HandleRest(player);
 		break;
-	case EncounterType::Trap:
-		HandleTrap(player);
+	case RoomContent::Trap:
+		HandleTrap(player, room);
 		break;
-	case EncounterType::Nothing:
-		std::cout << "  Nothing happens. You press onward.\n";
+	case RoomContent::Staircase:
+		Console::PrintSlow("  You find a staircase spiraling downward into darkness.");
+		return;
+	case RoomContent::Empty:
+		Console::PrintSlow("  The room is empty. Dust motes drift in the stale air.");
 		break;
 	}
+
+	room.contentResolved = true;
+	if (player.IsAlive()) {
+		gameStats_.roomsExplored++;
+		AwardExplorationXP(player);
+	}
+}
+
+void Dungeon::EnterRoom(Player& player) {
+	Room& room = grid_[playerY_][playerX_];
+	room.visited = true;
+
+	Console::Clear();
+	Console::PrintSlow("\n-- Room (" + std::to_string(room.x) + ", "
+		+ std::to_string(room.y) + ") --");
+
+	HandleRoomContent(player, room);
+}
+
+bool Dungeon::PromptMovement(Player& player) {
+	while (player.IsAlive()) {
+		Room& current = grid_[playerY_][playerX_];
+
+		PrintMap();
+		player.PrintStatus();
+
+		std::cout << "\n  What do you do?\n";
+		int optNum = 1;
+
+		struct MoveOption { Direction dir; int num; };
+		std::vector<MoveOption> moves;
+
+		for (int d = 0; d < 4; d++) {
+			Direction dir = static_cast<Direction>(d);
+			if (current.HasExit(dir)) {
+				int nx = playerX_, ny = playerY_;
+				switch (dir) {
+				case Direction::North: ny--; break;
+				case Direction::South: ny++; break;
+				case Direction::East:  nx++; break;
+				case Direction::West:  nx--; break;
+				}
+				if (nx >= 0 && nx < gridSize_ && ny >= 0 && ny < gridSize_) {
+					const Room& adj = grid_[ny][nx];
+					std::string label = std::string("Move ") + DirectionName(dir);
+					if (adj.visited) label += " (visited)";
+					else label += " (unexplored)";
+					std::cout << "    " << optNum << ". " << label << "\n";
+					moves.push_back({dir, optNum});
+					optNum++;
+				}
+			}
+		}
+
+		int perceiveOpt = 0;
+		if (!current.perceptionUsed) {
+			perceiveOpt = optNum;
+			std::cout << "    " << optNum << ". Perception check (survey surroundings)\n";
+			optNum++;
+		}
+
+		int inventoryOpt = 0;
+		if (!player.GetInventory().IsEmpty()) {
+			inventoryOpt = optNum;
+			std::cout << "    " << optNum << ". Use item\n";
+			optNum++;
+		}
+
+		int descOpt = 0;
+		if (current.content == RoomContent::Staircase && !current.contentResolved) {
+			descOpt = optNum;
+			std::cout << "    " << optNum << ". Descend staircase (next floor)\n";
+			optNum++;
+		}
+
+		std::cout << "  > ";
+		int choice = 0;
+		std::cin >> choice;
+
+		while (std::cin.fail() || choice < 1 || choice >= optNum) {
+			std::cin.clear();
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			std::cout << "  Invalid. Enter 1-" << (optNum - 1) << ": ";
+			std::cin >> choice;
+		}
+
+		for (const auto& m : moves) {
+			if (choice == m.num) {
+				switch (m.dir) {
+				case Direction::North: playerY_--; break;
+				case Direction::South: playerY_++; break;
+				case Direction::East:  playerX_++; break;
+				case Direction::West:  playerX_--; break;
+				}
+				Console::PrintSlow("\n  You move " + std::string(DirectionName(m.dir)) + "...");
+				EnterRoom(player);
+				if (!player.IsAlive()) return false;
+				goto continue_loop;
+			}
+		}
+
+		if (perceiveOpt > 0 && choice == perceiveOpt) {
+			Perception::PerceiveFromRoom(current, grid_, gridSize_, player);
+			continue;
+		}
+
+		if (inventoryOpt > 0 && choice == inventoryOpt) {
+			std::cout << "  Inventory:\n";
+			player.GetInventory().ListItems();
+			std::cout << "    0. Cancel\n  > ";
+			int itemChoice = 0;
+			std::cin >> itemChoice;
+			if (itemChoice >= 1 && itemChoice <= static_cast<int>(player.GetInventory().Size())) {
+				int hp = player.GetHP();
+				int mana = player.GetMana();
+				player.GetInventory().UseItem(
+					itemChoice - 1, hp, player.GetMaxHP(), mana, player.GetMaxMana());
+				if (hp > player.GetHP()) player.Heal(hp - player.GetHP());
+				if (mana > player.GetMana()) player.RestoreMana(mana - player.GetMana());
+			}
+			continue;
+		}
+
+		if (descOpt > 0 && choice == descOpt) {
+			current.contentResolved = true;
+			return true;
+		}
+
+		continue_loop:;
+	}
+
+	return false;
 }
 
 bool Dungeon::RunFloor(Player& player) {
-	static RNG rng;
+	GenerateFloor();
+	seenEnemyTypes_.clear();
 
-	int encounters = 3 + rng.NextInt(0, 2) + currentLevel_ / 3; // 3-5 base, +1 per 3 levels
+	Console::Clear();
+	Console::PrintSlow("\n+======================================+");
+	std::string floorLine = "|       DUNGEON FLOOR " + std::to_string(currentLevel_);
+	while (floorLine.size() < 39) floorLine += " ";
+	floorLine += "|";
+	Console::PrintSlow(floorLine);
+	Console::PrintSlow("+======================================+");
+	Console::PrintSlow(std::string("You ") + (currentLevel_ == 1 ? "enter" : "descend to")
+		+ " floor " + std::to_string(currentLevel_) + " of the dungeon.");
+	Console::PrintSlow("The floor is a " + std::to_string(gridSize_) + "x"
+		+ std::to_string(gridSize_) + " grid of rooms.");
+	Console::PrintSlow("Find the staircase to proceed deeper!");
 
-	std::cout << "\n????????????????????????????????????\n";
-	std::cout << "?     DUNGEON FLOOR " << currentLevel_ << "              ?\n";
-	std::cout << "????????????????????????????????????\n";
-	std::cout << "You descend deeper into the dungeon...\n";
-	std::cout << "(" << encounters << " rooms on this floor)\n";
+	Console::PrintSlow("\n-- Starting Room --");
+	Console::PrintSlow("  You stand at the entrance. The air is cold and damp.");
 
-	for (int i = 0; i < encounters; ++i) {
-		std::cout << "\n?? Room " << (i + 1) << "/" << encounters << " ??\n";
+	bool descended = PromptMovement(player);
 
-		Encounter enc = GenerateEncounter();
-		HandleEncounter(player, enc);
+	if (!player.IsAlive()) return false;
 
-		if (!player.IsAlive()) return false;
+	if (descended) {
+		Console::Clear();
+		Console::PrintSlow("\n==================================");
+		Console::PrintSlow("  Floor " + std::to_string(currentLevel_) + " cleared!");
+		gameStats_.floorsCleared++;
 
-		// Show status between rooms
-		if (i < encounters - 1) {
-			std::cout << "\nYou continue deeper...\n";
-		}
+		int visited = 0;
+		int total = gridSize_ * gridSize_;
+		for (int y = 0; y < gridSize_; ++y)
+			for (int x = 0; x < gridSize_; ++x)
+				if (grid_[y][x].visited) visited++;
+
+		Console::PrintSlow("  Rooms explored: " + std::to_string(visited)
+			+ "/" + std::to_string(total));
+		int bonusXP = visited * 2;
+		std::cout << "  Exploration bonus: ";
+		player.GainXP(bonusXP);
+
+		Console::PrintSlow("==================================");
+
+		int restHp = 5 + currentLevel_;
+		int restMana = 3 + currentLevel_ / 2;
+		player.Heal(restHp);
+		player.RestoreMana(restMana);
+		Console::PrintSlow("  Between floors you rest, recovering " + std::to_string(restHp)
+			+ " HP and " + std::to_string(restMana) + " Mana.");
+		player.PrintStatus();
+
+		currentLevel_++;
+		return true;
 	}
 
-	std::cout << "\n??????????????????????????????????\n";
-	std::cout << "  Floor " << currentLevel_ << " cleared!\n";
-	std::cout << "??????????????????????????????????\n";
-
-	// Small rest between floors
-	int restHp = 15;
-	int restMana = 10;
-	player.Heal(restHp);
-	player.RestoreMana(restMana);
-	std::cout << "  Between floors you rest, recovering " << restHp << " HP and " << restMana << " Mana.\n";
-	player.PrintStatus();
-
-	currentLevel_++;
-	return true;
+	return false;
 }

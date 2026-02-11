@@ -21,7 +21,7 @@ struct Item {
 };
 
 // Predefined items
-inline Item MakeHealthPotion() { return {"Health Potion", ItemType::HealthPotion, 25}; }
-inline Item MakeLargeHealthPotion() { return {"Large Health Potion", ItemType::HealthPotion, 50}; }
-inline Item MakeManaPotion() { return {"Mana Potion", ItemType::ManaPotion, 15}; }
-inline Item MakeLargeManaPotion() { return {"Large Mana Potion", ItemType::ManaPotion, 30}; }
+inline Item MakeHealthPotion() { return {"Health Potion", ItemType::HealthPotion, 10}; }
+inline Item MakeLargeHealthPotion() { return {"Large Health Potion", ItemType::HealthPotion, 20}; }
+inline Item MakeManaPotion() { return {"Mana Potion", ItemType::ManaPotion, 6}; }
+inline Item MakeLargeManaPotion() { return {"Large Mana Potion", ItemType::ManaPotion, 12}; }

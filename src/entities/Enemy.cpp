@@ -2,8 +2,9 @@
 #include "utils/RNG.h"
 #include <iostream>
 
-Enemy::Enemy(const std::string& name, const Stats& stats, const std::vector<Spell>& spells)
-	: Entity(name, stats) {
+Enemy::Enemy(const std::string& name, const Stats& stats, const std::vector<Spell>& spells,
+	int xpReward, SpellElement weakness)
+	: Entity(name, stats), xpReward_(xpReward), weakness_(weakness) {
 	for (const auto& spell : spells) {
 		LearnSpell(spell);
 	}
@@ -39,15 +40,77 @@ TurnAction Enemy::DecideTurn() {
 	}
 	else {
 		action.type = ActionType::Attack;
-		std::cout << "  " << name_ << " snarls and readies an attack!\n";
+		// Pick a random attack style
+		int style = rng.NextInt(0, 2);
+		switch (style) {
+		case 0:
+			action.attackStyle = AttackStyle::Slash;
+			std::cout << "  " << name_ << " slashes at you!\n";
+			break;
+		case 1:
+			action.attackStyle = AttackStyle::Thrust;
+			std::cout << "  " << name_ << " thrusts precisely!\n";
+			break;
+		case 2:
+			action.attackStyle = AttackStyle::Bash;
+			std::cout << "  " << name_ << " winds up a heavy blow!\n";
+			break;
+		}
 	}
 
 	return action;
 }
 
 void Enemy::PrintStatus() const {
-	std::cout << name_ << " — HP: " << currentHp_ << "/" << stats_.maxHp
-		<< " | Mana: " << currentMana_ << "/" << stats_.maxMana
-		<< " | ATK: " << stats_.atk
-		<< " | SPD: " << stats_.speed << "\n";
+	PrintStatus(EnemyKnowledge::None);
 }
+
+void Enemy::PrintStatus(EnemyKnowledge knowledge) const {
+	switch (knowledge) {
+	case EnemyKnowledge::None:
+		std::cout << name_ << " - HP: ???  | ATK: ???  | SPD: ???\n";
+		break;
+	case EnemyKnowledge::Approximate: {
+		static RNG rng;
+		// Show approximate values (within +/- 20%)
+		auto approx = [&](int val) -> std::string {
+			int fuzz = std::max(1, val / 5);
+			int shown = val + rng.NextInt(-fuzz, fuzz);
+			if (shown < 1) shown = 1;
+			return "~" + std::to_string(shown);
+		};
+		std::cout << name_ << " - HP: " << approx(currentHp_) << "/" << approx(stats_.maxHp)
+			<< "  | ATK: " << approx(stats_.atk)
+			<< "  | SPD: " << approx(stats_.speed) << "\n";
+		break;
+	}
+	case EnemyKnowledge::Partial:
+		std::cout << name_ << " - HP: " << currentHp_ << "/" << stats_.maxHp
+			<< "  | ATK: " << stats_.atk
+			<< "  | SPD: " << stats_.speed << "\n";
+		break;
+	case EnemyKnowledge::Full: {
+		std::cout << name_ << " - HP: " << currentHp_ << "/" << stats_.maxHp
+			<< "  | ATK: " << stats_.atk
+			<< "  | SPD: " << stats_.speed
+			<< "  | INT: " << stats_.intelligence;
+		// Show weakness
+		Spell tmpSpell;
+		tmpSpell.element = weakness_;
+		std::cout << "  | WEAK TO: " << tmpSpell.GetElementName();
+		// Show known spells
+		if (!knownSpells_.empty()) {
+			std::cout << "  | Spells: ";
+			for (size_t i = 0; i < knownSpells_.size(); ++i) {
+				if (i > 0) std::cout << ", ";
+				std::cout << knownSpells_[i].name;
+			}
+		}
+		std::cout << "\n";
+		break;
+	}
+	}
+}
+
+int Enemy::GetXPReward() const { return xpReward_; }
+SpellElement Enemy::GetWeakness() const { return weakness_; }

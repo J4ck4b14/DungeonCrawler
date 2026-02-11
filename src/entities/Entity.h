@@ -9,13 +9,22 @@ enum class ActionType {
 	Defend,
 	CastSpell,
 	UseItem,
+	Inspect,
 	None
+};
+
+// Physical attack styles
+enum class AttackStyle {
+	Slash,     // Balanced: 1.0x ATK
+	Thrust,    // Precise:  0.8x ATK, ignores defense
+	Bash       // Heavy:    1.3x ATK, but slower (enemy might counter)
 };
 
 struct TurnAction {
 	ActionType type = ActionType::None;
 	int spellIndex = -1;  // Index into the entity's known spells
 	int itemIndex = -1;   // Index into inventory (Player only)
+	AttackStyle attackStyle = AttackStyle::Slash; // Physical attack variant
 };
 
 class Entity {
