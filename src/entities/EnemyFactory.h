@@ -3,5 +3,6 @@
 
 class EnemyFactory {
 public:
-	static Enemy CreateRandomEnemy();
+	// Create a random enemy scaled to the dungeon level
+	static Enemy CreateEnemy(int dungeonLevel);
 };

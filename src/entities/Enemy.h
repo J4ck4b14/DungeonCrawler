@@ -3,7 +3,9 @@
 
 class Enemy : public Entity {
 public:
-	Enemy(const std::string& name, int hp, int atk);
+	Enemy(const std::string& name, const Stats& stats, const std::vector<Spell>& spells = {});
 
-	void TakeTurn() override;
+	TurnAction DecideTurn() override;
+
+	void PrintStatus() const;
 };
