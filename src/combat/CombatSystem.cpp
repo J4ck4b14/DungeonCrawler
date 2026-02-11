@@ -46,9 +46,10 @@ static bool IsPhysicalParry(DefenseStance stance, AttackStyle style) {
 }
 
 // ---- Execute a single action ----
+// Now takes a Bestiary* so we can record weakness discoveries in combat
 
 static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& action,
-	GameStats& stats, Enemy* enemyTarget, bool isPlayer) {
+	GameStats& stats, Enemy* enemyTarget, bool isPlayer, Bestiary* bestiary = nullptr) {
 
 	actor.SetDefending(false);
 
@@ -252,11 +253,22 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 			}
 
 			// Weakness bonus
+			bool hitWeakness = false;
 			if (enemyTarget && spell.element == enemyTarget->GetWeakness()) {
+				hitWeakness = true;
 				dmg = static_cast<int>(dmg * 1.5f);
 				Console::PrintSlow("  " + actor.GetName() + " casts " + spell.name
 					+ " [" + spell.GetElementName() + "] for " + std::to_string(dmg)
 					+ " damage! It's super effective!");
+
+				// Record weakness discovery in bestiary if player exploited it
+				if (isPlayer && bestiary) {
+					bool newDiscovery = bestiary->RecordWeaknessDiscovered(enemyTarget->GetName());
+					if (newDiscovery) {
+						Console::PrintSlow("  ** Weakness discovered: " + enemyTarget->GetName()
+							+ " is weak to " + spell.GetElementName() + "! Added to bestiary! **");
+					}
+				}
 			}
 			else {
 				Console::PrintSlow("  " + actor.GetName() + " casts " + spell.name
@@ -362,17 +374,14 @@ static EnemyKnowledge InspectEnemy(const Player& player, Enemy& enemy,
 }
 
 // ---- Death-save Heartbeat QTE ----
-// When the player takes a fatal blow, they get a chance to survive by
-// matching a rhythmic sequence of numbers (1-3) on a heartbeat pace.
-// Each death save in a run makes the next one harder:
-//   - More beats in the sequence (4 + deathSaveCount * 2, capped at 12)
-//   - Tighter timing window (1000ms - deathSaveCount * 100ms, min 400ms)
-// Only triggers once per combat encounter.
 
 static bool AttemptDeathSave(Player& player, bool& deathSaveUsed) {
 	if (player.IsAlive() || deathSaveUsed) return false;
 
 	deathSaveUsed = true;
+
+	Console::WaitForEnter();
+	Console::Clear();
 
 	int saveCount = player.GetDeathSaveCount();
 
@@ -380,7 +389,7 @@ static bool AttemptDeathSave(Player& player, bool& deathSaveUsed) {
 	static RNG qteRng;
 	int seqLen = std::min(12, 4 + saveCount * 2);
 	int windowMs = std::max(400, 1000 - saveCount * 100);
-	int beatMs = 600; // Time between beats (the rhythm)
+	int beatMs = 600;
 
 	std::vector<int> sequence;
 	for (int i = 0; i < seqLen; ++i) {
@@ -423,6 +432,9 @@ static bool AttemptDeathSave(Player& player, bool& deathSaveUsed) {
 		}));
 		Console::PrintSlow("  Recovered " + std::to_string(reviveHp) + " HP!");
 		Console::PrintSlow("");
+
+		Console::WaitForEnter();
+		Console::Clear();
 		return true;
 	}
 	else {
@@ -455,11 +467,20 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 	Console::PrintSlow("\n==================================");
 	Console::PrintSlow("  A " + enemy.GetName() + " appears!");
 	Console::PrintSlow("==================================");
+
 	enemy.PrintStatus(knowledge);
+
+	// Show known weakness from bestiary if discovered (but not yet Full knowledge)
+	if (knowledge != EnemyKnowledge::Full && bestiary.IsWeaknessKnown(enemy.GetName())) {
+		Spell tmp;
+		tmp.element = enemy.GetWeakness();
+		std::cout << "  (Known weakness: " << tmp.GetElementName() << ")\n";
+	}
+
 	std::cout << "\n";
 
-	// Bestiary discovery
-	bool newDiscovery = bestiary.RecordEnemy(enemy, knowledge);
+	// Bestiary discovery (capture player INT at discovery time)
+	bool newDiscovery = bestiary.RecordEnemy(enemy, knowledge, player.GetIntelligence());
 	if (newDiscovery) {
 		Console::PrintSlow("  ** New bestiary entry: " + enemy.GetName() + "! **");
 		player.GainXP(3);
@@ -477,6 +498,13 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 		std::cout << "\n-- Round Start --\n";
 		player.PrintStatus();
 		enemy.PrintStatus(knowledge);
+
+		// Show known weakness inline if discovered
+		if (knowledge != EnemyKnowledge::Full && bestiary.IsWeaknessKnown(enemy.GetName())) {
+			Spell tmp;
+			tmp.element = enemy.GetWeakness();
+			std::cout << "  (Known weakness: " << tmp.GetElementName() << ")\n";
+		}
 
 		bool playerFirst = playerSpeed >= enemySpeed;
 
@@ -509,7 +537,7 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 					}
 				}
 				else {
-					ExecuteAction(player, enemy, action, gameStats, &enemy, true);
+					ExecuteAction(player, enemy, action, gameStats, &enemy, true, &bestiary);
 				}
 			}
 		};
@@ -530,40 +558,26 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 			}
 		};
 
-		// Turn order depends on speed.
-		// Defense is a PREDICTION: you set your stance, then the opponent acts.
-		//
-		// If player is faster:  Player acts -> Enemy acts -> clear both defenses
-		//   Player can attack (resolved immediately) or defend (stance set for
-		//   enemy's upcoming attack this round).
-		//
-		// If enemy is faster:   Enemy acts -> Player acts
-		//   If the player DEFENDS here, they are predicting what the enemy will
-		//   do NEXT round. Their defense persists into the next round — only
-		//   the enemy's defense resets, the player's stays if they defended.
-		//
-		// This means defending is always meaningful regardless of speed.
-
 		if (playerFirst) {
 			doPlayerActions();
 			if (enemy.IsAlive()) doEnemyActions();
-			// Player defended before enemy acted — they got value. Clear both.
 			player.SetDefending(false);
 			enemy.SetDefending(false);
 		}
 		else {
-			// Enemy goes first — player eats the blow if not already defending
 			doEnemyActions();
 			bool playerWasDefending = player.IsDefending();
 			if (player.IsAlive()) doPlayerActions();
-			// Enemy defense always resets
 			enemy.SetDefending(false);
 			if (playerWasDefending) {
-				// Was defending from last round — enemy attacked into it. Clear now.
 				player.SetDefending(false);
 			}
-			// If player defended THIS turn (wasn't defending before, is now),
-			// their defense carries to next round's enemy-goes-first turn.
+		}
+
+		// End of round: wait for input then clear
+		if (player.IsAlive() && enemy.IsAlive()) {
+			Console::WaitForEnter();
+			Console::Clear();
 		}
 	}
 
@@ -586,6 +600,7 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 		}
 
 		Console::WaitForEnter();
+		Console::Clear();
 		return true;
 	}
 	else {
@@ -595,6 +610,7 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 			"Darkness closes in... " + player.GetName() + " is no more.",
 		}));
 		Console::WaitForEnter();
+		Console::Clear();
 		return false;
 	}
 }
