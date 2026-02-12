@@ -63,7 +63,7 @@ inline void WaitForEnter(const std::string& prompt = "  Press Enter to continue.
 inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windowMs) {
 #ifdef _WIN32
 	// Flush any buffered keypresses
-	while (_kbhit()) _getch();
+	while (_kbhit()) (void)_getch();
 
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		int digit = sequence[i];
@@ -77,7 +77,7 @@ inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windo
 		std::cout.flush();
 
 		// Flush any early keypresses
-		while (_kbhit()) _getch();
+		while (_kbhit()) (void)_getch();
 
 		// Wait for the correct keypress within the window
 		auto start = std::chrono::steady_clock::now();

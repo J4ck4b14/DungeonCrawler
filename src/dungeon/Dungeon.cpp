@@ -5,6 +5,9 @@
 #include "items/Item.h"
 #include "utils/RNG.h"
 #include "utils/Console.h"
+#include "core/DevMode.h"
+#include "combat/Spell.h"
+#include "Room.h"
 #include <iostream>
 #include <limits>
 #include <algorithm>
@@ -22,10 +25,17 @@ RoomContent Dungeon::GenerateRoomContent(bool isStart, bool isStaircase) {
 	static RNG rng;
 	int roll = rng.NextInt(1, 100);
 
-	int combatChance = 40 + currentLevel_ * 2;
-	int chestChance = 15;
-	int trapChance = 8 + currentLevel_;
-	int restChance = 12 - currentLevel_;
+	float enemyScale = 1.0f;
+	float trapMul = 1.0f;
+	if (DevMode::IsEnabled()) {
+		enemyScale = DevMode::GetEnemyScale();
+		trapMul = DevMode::GetTrapMultiplier();
+	}
+
+	int combatChance = static_cast<int>((40 + currentLevel_ * 2) * enemyScale);
+	int chestChance = static_cast<int>(15 * (1.0f / enemyScale)); // fewer chests if enemies scaled up
+	int trapChance = static_cast<int>((8 + currentLevel_) * trapMul);
+	int restChance = static_cast<int>((12 - currentLevel_) * (1.0f / trapMul));
 	if (restChance < 2) restChance = 2;
 
 	if (roll <= combatChance) return RoomContent::Combat;
@@ -117,59 +127,203 @@ void Dungeon::GenerateFloor() {
 		}
 	}
 
+	// Random hidden / breakable connections (behind a brittle wall)
+	for (int y = 0; y < gridSize_; ++y) {
+		for (int x = 0; x < gridSize_; ++x) {
+			// East
+			if (x + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::East)
+				&& !grid_[y][x + 1].HasExit(Direction::West)) {
+				// Small chance to create hidden breakable wall between these rooms
+				if (rng.Chance(0.12f)) {
+					// Choose a material and assign a hidden HP + optional elemental weakness.
+					int baseHp = rng.NextInt(6, 14) + (currentLevel_ / 2);
+					WallMaterial mat;
+					SpellElement weakness = SpellElement::Arcane;
+					if (baseHp <= 8) {
+						mat = WallMaterial::Wood;
+						weakness = SpellElement::Fire;
+					}
+					else if (baseHp <= 14) {
+						mat = WallMaterial::Stone;
+						weakness = SpellElement::Arcane;
+					}
+					else {
+						mat = WallMaterial::Strange;
+						weakness = (rng.Chance(0.5f)) ? SpellElement::Arcane : SpellElement::Shadow;
+						// Strange materials scale harder with depth
+						baseHp += currentLevel_;
+					}
+					grid_[y][x].SetHiddenExit(Direction::East, true, baseHp);
+					grid_[y][x].hiddenMaterial[static_cast<int>(Direction::East)] = mat;
+					grid_[y][x].hiddenWeakness[static_cast<int>(Direction::East)] = weakness;
+
+					grid_[y][x + 1].SetHiddenExit(Direction::West, true, baseHp);
+					grid_[y][x + 1].hiddenMaterial[static_cast<int>(Direction::West)] = mat;
+					grid_[y][x + 1].hiddenWeakness[static_cast<int>(Direction::West)] = weakness;
+				}
+			}
+			// South
+			if (y + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::South)
+				&& !grid_[y + 1][x].HasExit(Direction::North)) {
+				if (rng.Chance(0.12f)) {
+					int baseHp = rng.NextInt(6, 14) + (currentLevel_ / 2);
+					WallMaterial mat;
+					SpellElement weakness = SpellElement::Arcane;
+					if (baseHp <= 8) {
+						mat = WallMaterial::Wood;
+						weakness = SpellElement::Fire;
+					}
+					else if (baseHp <= 14) {
+						mat = WallMaterial::Stone;
+						weakness = SpellElement::Arcane;
+					}
+					else {
+						mat = WallMaterial::Strange;
+						weakness = (rng.Chance(0.5f)) ? SpellElement::Arcane : SpellElement::Shadow;
+						baseHp += currentLevel_;
+					}
+					grid_[y][x].SetHiddenExit(Direction::South, true, baseHp);
+					grid_[y][x].hiddenMaterial[static_cast<int>(Direction::South)] = mat;
+					grid_[y][x].hiddenWeakness[static_cast<int>(Direction::South)] = weakness;
+
+					grid_[y + 1][x].SetHiddenExit(Direction::North, true, baseHp);
+					grid_[y + 1][x].hiddenMaterial[static_cast<int>(Direction::North)] = mat;
+					grid_[y + 1][x].hiddenWeakness[static_cast<int>(Direction::North)] = weakness;
+				}
+			}
+		}
+	}
+
 	grid_[playerY_][playerX_].visited = true;
 	grid_[playerY_][playerX_].contentResolved = true;
 }
 
 void Dungeon::PrintMap() const {
 	std::cout << "\n  MAP (Level " << currentLevel_ << "):\n";
-	std::cout << "  Legend: @ = You  ? = Unvisited  V = Staircase\n\n";
+	std::cout << "  Legend: @ = You  ? = Adjacent (unknown)  V = Staircase\n\n";
 
-	for (int y = 0; y < gridSize_; ++y) {
-		std::cout << "  ";
-		for (int x = 0; x < gridSize_; ++x) {
-			std::cout << "+";
-			if (grid_[y][x].HasExit(Direction::North) && y > 0) {
-				if (grid_[y][x].visited || grid_[y - 1][x].visited)
-					std::cout << "  ";
-				else
-					std::cout << "--";
-			}
-			else {
-				std::cout << "--";
+	// Helpers
+	auto isVisible = [&](int x, int y) -> bool {
+		if (DevMode::IsEnabled() && DevMode::RevealMapEnabled()) return true;
+		return grid_[y][x].visited;
+	};
+	auto isAdjacentToVisited = [&](int x, int y) -> bool {
+		const int dx[4] = { 0, 1, 0, -1 };
+		const int dy[4] = { -1, 0, 1, 0 };
+		for (int i = 0; i < 4; ++i) {
+			int nx = x + dx[i], ny = y + dy[i];
+			if (nx >= 0 && nx < gridSize_ && ny >= 0 && ny < gridSize_) {
+				if (grid_[ny][nx].visited) return true;
 			}
 		}
-		std::cout << "+\n";
+		return false;
+	};
 
-		std::cout << "  ";
+	// Compute vertical cropping: show only explored rows plus a 1-row margin.
+	int minY = gridSize_, maxY = -1;
+	int minX = gridSize_, maxX = -1;
+	for (int y = 0; y < gridSize_; ++y) {
 		for (int x = 0; x < gridSize_; ++x) {
-			if (grid_[y][x].HasExit(Direction::West) && x > 0) {
-				if (grid_[y][x].visited || grid_[y][x - 1].visited)
+			if (grid_[y][x].visited) {
+				minY = std::min(minY, y);
+				maxY = std::max(maxY, y);
+				minX = std::min(minX, x);
+				maxX = std::max(maxX, x);
+			}
+		}
+	}
+
+	// Nothing visited yet -> small window around player
+	if (maxY == -1) {
+		minY = std::max(0, playerY_ - 1);
+		maxY = std::min(gridSize_ - 1, playerY_ + 1);
+		minX = std::max(0, playerX_ - 1);
+		maxX = std::min(gridSize_ - 1, playerX_ + 1);
+	}
+	// Add 1-cell margin, clamp
+	minY = std::max(0, minY - 1);
+	maxY = std::min(gridSize_ - 1, maxY + 1);
+	minX = std::max(0, minX - 1);
+	maxX = std::min(gridSize_ - 1, maxX + 1);
+
+	// Iterate rows in cropped range
+	for (int y = minY; y <= maxY; ++y) {
+		// Top border line for this row
+		std::cout << "  ";
+		bool anyPlus = false;
+		std::string topLine;
+		for (int x = minX; x <= maxX; ++x) {
+			bool vis = isVisible(x, y);
+			bool visAbove = (y > 0 && isVisible(x, y - 1));
+
+			if (vis || visAbove) {
+				anyPlus = true;
+				topLine += "+";
+				// Only show a clear connector if both rooms (this and above) are visible
+				if (grid_[y][x].HasExit(Direction::North) && vis && visAbove)
+					topLine += "  ";
+				else
+					topLine += "--";
+			}
+			else {
+				// Hide completely (preserve spacing)
+				topLine += "   ";
+			}
+		}
+		topLine += anyPlus ? "+" : " ";
+		std::cout << topLine << "\n";
+
+		// Middle line: verticals + room contents
+		std::cout << "  ";
+		for (int x = minX; x <= maxX; ++x) {
+			bool vis = isVisible(x, y);
+			bool visLeft = (x > 0 && isVisible(x - 1, y));
+
+			// Vertical border: only render when either side is visible; actual opening shown only if both visible
+			if (vis || visLeft) {
+				if (grid_[y][x].HasExit(Direction::West) && vis && visLeft)
 					std::cout << " ";
 				else
 					std::cout << "|";
 			}
 			else {
-				std::cout << "|";
+				std::cout << " ";
 			}
 
+			// Room content / marker
 			if (x == playerX_ && y == playerY_)
 				std::cout << "@ ";
-			else if (grid_[y][x].visited) {
+			else if (vis) {
 				if (grid_[y][x].content == RoomContent::Staircase && !grid_[y][x].contentResolved)
 					std::cout << "V ";
 				else
 					std::cout << "  ";
 			}
-			else
+			else if (isAdjacentToVisited(x, y)) {
+				// Adjacent to a visited room => show an unknown marker
 				std::cout << "? ";
+			}
+			else {
+				// Completely hidden
+				std::cout << "  ";
+			}
 		}
-		std::cout << "|\n";
+
+		// Rightmost border for the row
+		bool anyRight = isVisible(maxX, y) || (maxX > minX && isVisible(maxX - 1, y));
+		std::cout << (anyRight ? "|\n" : " \n");
 	}
 
+	// Bottom border for the cropped area
 	std::cout << "  ";
-	for (int x = 0; x < gridSize_; ++x)
-		std::cout << "+--";
+	for (int x = minX; x <= maxX; ++x) {
+		if (isVisible(x, maxY)) {
+			std::cout << "+--";
+		}
+		else {
+			std::cout << "   ";
+		}
+	}
 	std::cout << "+\n\n";
 }
 
@@ -393,8 +547,6 @@ void Dungeon::EnterRoom(Player& player) {
 
 	Console::WaitForEnter();
 	Console::Clear();
-	Console::PrintSlow("\n-- Room (" + std::to_string(room.x) + ", "
-		+ std::to_string(room.y) + ") --");
 
 	HandleRoomContent(player, room);
 }
@@ -409,9 +561,10 @@ bool Dungeon::PromptMovement(Player& player) {
 		std::cout << "\n  What do you do?\n";
 		int optNum = 1;
 
-		struct MoveOption { Direction dir; int num; };
+		struct MoveOption { Direction dir; int num; bool isHidden; };
 		std::vector<MoveOption> moves;
 
+		// Collect normal movement / hidden-break options
 		for (int d = 0; d < 4; d++) {
 			Direction dir = static_cast<Direction>(d);
 			if (current.HasExit(dir)) {
@@ -428,10 +581,49 @@ bool Dungeon::PromptMovement(Player& player) {
 					if (adj.visited) label += " (visited)";
 					else label += " (unexplored)";
 					std::cout << "    " << optNum << ". " << label << "\n";
-					moves.push_back({dir, optNum});
+					moves.push_back({dir, optNum, false});
 					optNum++;
 				}
 			}
+			else if (current.HasHiddenExit(dir)) {
+				// Hidden/breakable wall option (explicit)
+				int nx = playerX_, ny = playerY_;
+				switch (dir) {
+				case Direction::North: ny--; break;
+				case Direction::South: ny++; break;
+				case Direction::East:  nx++; break;
+				case Direction::West:  nx--; break;
+				}
+				if (nx >= 0 && nx < gridSize_ && ny >= 0 && ny < gridSize_) {
+					std::string label = std::string("Attempt to break wall ") + DirectionName(dir)
+						+ " (strength check)";
+					std::cout << "    " << optNum << ". " << label << "\n";
+					moves.push_back({dir, optNum, true});
+					optNum++;
+				}
+			}
+		}
+
+		// Attack wall option: allow attacking any adjacent wall (hidden or solid)
+		bool anyWall = false;
+		for (int d = 0; d < 4; ++d) {
+			Direction dir = static_cast<Direction>(d);
+			int nx = playerX_, ny = playerY_;
+			switch (dir) {
+			case Direction::North: ny--; break;
+			case Direction::South: ny++; break;
+			case Direction::East:  nx++; break;
+			case Direction::West:  nx--; break;
+			}
+			if (nx < 0 || nx >= gridSize_ || ny < 0 || ny >= gridSize_) continue;
+			// treat as a wall if there's no open exit (either hidden or plain)
+			if (!current.HasExit(dir)) { anyWall = true; break; }
+		}
+		int attackWallOpt = 0;
+		if (anyWall) {
+			attackWallOpt = optNum;
+			std::cout << "    " << optNum << ". Attack a wall\n";
+			optNum++;
 		}
 
 		int perceiveOpt = 0;
@@ -471,8 +663,182 @@ bool Dungeon::PromptMovement(Player& player) {
 			std::cin >> choice;
 		}
 
+		static RNG rng;
+
+		// Helper: ensure a wall entry exists between current and direction (creates one if necessary)
+		auto EnsureWallExists = [&](Room& room, Direction dir) -> void {
+			int idx = static_cast<int>(dir);
+			if (room.HasHiddenExit(dir)) return; // already present
+			// create implicit hidden wall with reasonable defaults (scaled by depth)
+			int baseHp = rng.NextInt(6, 12) + (currentLevel_ / 2);
+			WallMaterial mat;
+			SpellElement weakness = SpellElement::Arcane;
+			if (baseHp <= 8) { mat = WallMaterial::Wood; weakness = SpellElement::Fire; }
+			else if (baseHp <= 14) { mat = WallMaterial::Stone; weakness = SpellElement::Arcane; }
+			else { mat = WallMaterial::Strange; weakness = (rng.Chance(0.5f)) ? SpellElement::Arcane : SpellElement::Shadow; baseHp += currentLevel_; }
+			room.SetHiddenExit(dir, true, baseHp);
+			room.hiddenMaterial[idx] = mat;
+			room.hiddenWeakness[idx] = weakness;
+			// Also set on adjacent room for symmetry
+			int ax = playerX_, ay = playerY_;
+			switch (dir) { case Direction::North: ay--; break; case Direction::South: ay++; break; case Direction::East: ax++; break; case Direction::West: ax--; break; }
+			if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
+				grid_[ay][ax].SetHiddenExit(OppositeDirection(dir), true, baseHp);
+				grid_[ay][ax].hiddenMaterial[static_cast<int>(OppositeDirection(dir))] = mat;
+				grid_[ay][ax].hiddenWeakness[static_cast<int>(OppositeDirection(dir))] = weakness;
+			}
+		};
+
+		// Wall attack handler: does physical or magical attempts, mirrors earlier logic
+		auto HandleWallAttack = [&](Direction dir) -> bool {
+			// prepare wall (create if missing)
+			if (!current.HasHiddenExit(dir)) {
+				EnsureWallExists(current, dir);
+			}
+			int wallHp = current.GetHiddenToughness(dir);
+			auto mat = current.hiddenMaterial[static_cast<int>(dir)];
+			auto weakness = current.hiddenWeakness[static_cast<int>(dir)];
+
+			Console::PrintSlow("\n  A solid barrier blocks the " + std::string(DirectionName(dir)) + ".");
+
+			// choose method
+			std::cout << "    1. Strike it physically\n";
+			std::cout << "    2. Cast a spell at it\n";
+			std::cout << "    0. Cancel\n";
+			std::cout << "  > ";
+			int sub = -1;
+			std::cin >> sub;
+			while (std::cin.fail() || sub < 0 || sub > 2) {
+				std::cin.clear();
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				std::cout << "  Invalid. Enter 0-2: ";
+				std::cin >> sub;
+			}
+			if (sub == 0) return false;
+
+			int ax = playerX_, ay = playerY_;
+			switch (dir) { case Direction::North: ay--; break; case Direction::South: ay++; break; case Direction::East: ax++; break; case Direction::West: ax--; break; }
+
+			if (sub == 1) {
+				int rawRoll = rng.NextInt(1, 20);
+				int phys = player.GetATK() + rng.NextInt(1, 4) + (rawRoll == 20 ? 4 : 0);
+				Console::PrintSlow("\n  You strike the barrier with all your might...");
+				if (rawRoll == 20) Console::PrintSlow("  A perfect hit! You land a heavy blow!");
+				if (rawRoll == 1) Console::PrintSlow("  Your blow slips and hurts you!");
+
+				int effective = phys;
+				if (mat == WallMaterial::Strange) effective = phys / 4;
+
+				if (effective >= wallHp) {
+					// break both sides
+					current.SetHiddenExit(dir, false, 0);
+					current.SetExit(dir, true);
+					if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
+						grid_[ay][ax].SetHiddenExit(OppositeDirection(dir), false, 0);
+						grid_[ay][ax].SetExit(OppositeDirection(dir), true);
+					}
+					Console::PrintSlow("  Your strike breaks the barrier! A passage opens.");
+					// move player into adjacent room
+					switch (dir) { case Direction::North: playerY_--; break; case Direction::South: playerY_++; break; case Direction::East: playerX_++; break; case Direction::West: playerX_--; break; }
+					EnterRoom(player);
+					return !player.IsAlive() ? false : true;
+				}
+				else {
+					int lost = std::max(1, effective / 2);
+					current.hiddenToughness[static_cast<int>(dir)] = std::max(1, wallHp - lost);
+					Console::PrintSlow("  The blow chips at the barrier, but it holds.");
+					if (rawRoll == 1 || rng.Chance(0.18f)) {
+						int dmg = rng.NextInt(1, 3) + (currentLevel_ / 2);
+						player.ReceiveDamage(dmg);
+						gameStats_.totalDamageTaken += dmg;
+						Console::PrintSlow("  You strain yourself and take " + std::to_string(dmg) + " damage!");
+						if (!player.IsAlive()) {
+							Console::PrintSlow("  The effort proved fatal...");
+							return false;
+						}
+						else {
+							player.PrintStatus();
+						}
+					}
+					return true;
+				}
+			}
+
+			// Cast spell at wall
+			const auto& spells = player.GetKnownSpells();
+			if (spells.empty()) {
+				Console::PrintSlow("  You don't know spells to try. Consider forcing it.");
+				return true;
+			}
+			std::cout << "\n  Choose a spell to target the barrier:\n";
+			for (size_t i = 0; i < spells.size(); ++i) {
+				std::cout << "    " << (i + 1) << ". " << spells[i].name
+					<< " (" << spells[i].GetElementName() << ", Cost: " << spells[i].manaCost << ")\n";
+			}
+			std::cout << "    0. Cancel\n  > ";
+			int sChoice = -1;
+			std::cin >> sChoice;
+			if (sChoice <= 0 || sChoice > static_cast<int>(spells.size())) {
+				Console::PrintSlow("  Cancelled.");
+				return true;
+			}
+			const Spell& sp = spells[sChoice - 1];
+			if (player.GetMana() < sp.manaCost) {
+				Console::PrintSlow("  Not enough mana to cast that.");
+				return true;
+			}
+			player.UseMana(sp.manaCost);
+			int spellDamage = sp.power + player.GetIntelligence() + player.ConsumeAttackBuff(true);
+
+			// If element matches weakness, amplify; Strange + correct element = insta-break
+			if (sp.element == weakness) {
+				if (mat == WallMaterial::Strange) {
+					current.SetHiddenExit(dir, false, 0);
+					current.SetExit(dir, true);
+					if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
+						grid_[ay][ax].SetHiddenExit(OppositeDirection(dir), false, 0);
+						grid_[ay][ax].SetExit(OppositeDirection(dir), true);
+					}
+					Console::PrintSlow("  Your spell resonates with the material and shatters it!");
+					switch (dir) { case Direction::North: playerY_--; break; case Direction::South: playerY_++; break; case Direction::East: playerX_++; break; case Direction::West: playerX_--; break; }
+					EnterRoom(player);
+					return !player.IsAlive() ? false : true;
+				}
+				else {
+					spellDamage = static_cast<int>(spellDamage * 1.75f);
+				}
+			}
+
+			if (spellDamage >= wallHp) {
+				current.SetHiddenExit(dir, false, 0);
+				current.SetExit(dir, true);
+				if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
+					grid_[ay][ax].SetHiddenExit(OppositeDirection(dir), false, 0);
+					grid_[ay][ax].SetExit(OppositeDirection(dir), true);
+				}
+				Console::PrintSlow("  Your spell damages the barrier until it collapses, revealing a passage!");
+				switch (dir) { case Direction::North: playerY_--; break; case Direction::South: playerY_++; break; case Direction::East: playerX_++; break; case Direction::West: playerX_--; break; }
+				EnterRoom(player);
+				return !player.IsAlive() ? false : true;
+			}
+			else {
+				int lost = std::max(1, spellDamage);
+				current.hiddenToughness[static_cast<int>(dir)] = std::max(1, wallHp - lost);
+				Console::PrintSlow("  The spell scorches the surface but the barrier still stands.");
+				return true;
+			}
+		};
+
+		// Process chosen movement options
 		for (const auto& m : moves) {
 			if (choice == m.num) {
+				// Existing hidden-break path remains but we prefer the new attack flow:
+				// If this was a hidden-break attempt, hand off to the new wall attack flow
+				if (m.isHidden) {
+					if (!HandleWallAttack(m.dir)) return false;
+					goto continue_loop;
+				}
+				// Normal movement along an open exit
 				switch (m.dir) {
 				case Direction::North: playerY_--; break;
 				case Direction::South: playerY_++; break;
@@ -484,6 +850,32 @@ bool Dungeon::PromptMovement(Player& player) {
 				if (!player.IsAlive()) return false;
 				goto continue_loop;
 			}
+		}
+
+		// Attack wall chosen
+		if (attackWallOpt > 0 && choice == attackWallOpt) {
+			// list candidate walls (all dirs without open exit)
+			std::vector<Direction> candidates;
+			std::cout << "\n  Choose a wall to attack:\n";
+			int dirOptBase = 1;
+			for (int d = 0; d < 4; ++d) {
+				Direction dir = static_cast<Direction>(d);
+				if (!current.HasExit(dir)) {
+					candidates.push_back(dir);
+					std::cout << "    " << dirOptBase << ". " << DirectionName(dir) << "\n";
+					dirOptBase++;
+				}
+			}
+			std::cout << "    0. Cancel\n  > ";
+			int dirChoice = -1;
+			std::cin >> dirChoice;
+			if (dirChoice <= 0 || dirChoice > static_cast<int>(candidates.size())) {
+				Console::PrintSlow("  Cancelled.");
+				continue;
+			}
+			Direction chosenDir = candidates[dirChoice - 1];
+			if (!HandleWallAttack(chosenDir)) return false;
+			continue;
 		}
 
 		if (perceiveOpt > 0 && choice == perceiveOpt) {
@@ -519,7 +911,7 @@ bool Dungeon::PromptMovement(Player& player) {
 			return true;
 		}
 
-		continue_loop:;
+	continue_loop:;
 	}
 
 	return false;
@@ -539,8 +931,7 @@ bool Dungeon::RunFloor(Player& player) {
 	Console::PrintSlow("+======================================+");
 	Console::PrintSlow(std::string("You ") + (currentLevel_ == 1 ? "enter" : "descend to")
 		+ " floor " + std::to_string(currentLevel_) + " of the dungeon.");
-	Console::PrintSlow("The floor is a " + std::to_string(gridSize_) + "x"
-		+ std::to_string(gridSize_) + " grid of rooms.");
+	// Removed explicit grid-size line so player stays unsure of layout.
 	Console::PrintSlow("Find the staircase to proceed deeper!");
 
 	Console::PrintSlow("\n-- Starting Room --");
@@ -558,13 +949,12 @@ bool Dungeon::RunFloor(Player& player) {
 		gameStats_.floorsCleared++;
 
 		int visited = 0;
-		int total = gridSize_ * gridSize_;
 		for (int y = 0; y < gridSize_; ++y)
 			for (int x = 0; x < gridSize_; ++x)
 				if (grid_[y][x].visited) visited++;
 
-		Console::PrintSlow("  Rooms explored: " + std::to_string(visited)
-			+ "/" + std::to_string(total));
+		// Show only the raw number of explored rooms (not the total explorable spaces)
+		Console::PrintSlow("  Rooms explored: " + std::to_string(visited));
 		int bonusXP = visited * 2;
 		std::cout << "  Exploration bonus: ";
 		player.GainXP(bonusXP);

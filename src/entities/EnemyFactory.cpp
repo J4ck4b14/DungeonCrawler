@@ -15,6 +15,7 @@
 #include "utils/RNG.h"
 #include "combat/Spell.h"
 #include <vector>
+#include "core/DevMode.h"
 
 Enemy EnemyFactory::CreateEnemy(int dungeonLevel) {
 	static RNG rng;
@@ -78,6 +79,18 @@ Enemy EnemyFactory::CreateEnemy(int dungeonLevel) {
 	stats.maxMana = stats.intelligence * 3;
 
 	int xp = static_cast<int>(tmpl.baseXP * scale);
+
+	// Apply dev-mode scaling to make enemies stronger / yield more XP during balancing
+	if (DevMode::IsEnabled()) {
+		float s = DevMode::GetEnemyScale();
+		stats.maxHp = static_cast<int>(stats.maxHp * s);
+		stats.atk = static_cast<int>(stats.atk * s);
+		xp = static_cast<int>(xp * s);
+		// ensure sane minima
+		if (stats.maxHp < 1) stats.maxHp = 1;
+		if (stats.atk < 1) stats.atk = 1;
+		if (xp < 1) xp = 1;
+	}
 
 	// Gather spells
 	std::vector<Spell> spells;

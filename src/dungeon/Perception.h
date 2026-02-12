@@ -19,6 +19,7 @@ private:
 	static std::string DescribeDirection(Direction dir, const Room& adjacent, 
 		int rollQuality);
 	
-	// Describe a wall (no exit in that direction)
-	static std::string DescribeWall(Direction dir);
+	// Describe a wall (no exit in that direction). The hasHidden flag
+	// indicates a brittle/breakable wall; toughness gives its break target.
+	static std::string DescribeWall(Direction dir, bool hasHidden = false, int toughness = 0);
 };

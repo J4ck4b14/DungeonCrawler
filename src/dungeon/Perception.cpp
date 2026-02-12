@@ -22,23 +22,47 @@
 #include "utils/RNG.h"
 #include <iostream>
 #include <sstream>
+#include "core/DevMode.h"
 
 int Perception::Roll(const Player& player) {
 	static RNG rng;
 	int base = rng.NextInt(1, 20);
+	// Apply dev-mode penalty (if enabled) to the raw d20. Minimum 1.
+	if (DevMode::IsEnabled()) {
+		base -= DevMode::GetPerceptionPenalty();
+		if (base < 1) base = 1;
+	}
 	// Roll is hidden from the player -- no output here
 	return base;
 }
 
-std::string Perception::DescribeWall(Direction dir) {
+std::string Perception::DescribeWall(Direction dir, bool hasHidden, int toughness) {
 	static RNG rng;
 	const char* dirName = DirectionName(dir);
 
+	// If there's a hidden/brittle wall here, prefer descriptions that hint weakness
+	if (hasHidden) {
+		std::vector<std::string> weakDescs = {
+			std::string("To the ") + dirName + (", the masonry looks cracked and brittle."),
+			std::string("The ") + dirName + (" wall has loose stones; it could be forced."),
+			std::string("A seam in the wall to the ") + dirName + (" suggests it may yield to force."),
+			std::string("The wall ") + dirName + (" is crumbly; a determined shove might open a passage.")
+		};
+		// If we want to subtly indicate toughness, append a hint for very high toughness
+		std::string base = weakDescs[rng.NextInt(0, static_cast<int>(weakDescs.size()) - 1)];
+		if (toughness >= 14) {
+			base += " It looks especially sturdy, however.";
+		} else if (toughness <= 8) {
+			base += " It seems fragile enough for a strong shove.";
+		}
+		return base;
+	}
+
 	std::vector<std::string> wallDescs = {
-		std::string("To the ") + dirName + ", there's a solid stone wall.",
-		std::string("The ") + dirName + " side is blocked by crumbling masonry.",
-		std::string("A rough wall of rock blocks the way ") + dirName + ".",
-		std::string("To the ") + dirName + ", moss-covered bricks form an impassable barrier."
+		std::string("To the ") + dirName + (", there's a solid stone wall."),
+		std::string("The ") + dirName + (" side is blocked by crumbling masonry."),
+		std::string("A rough wall of rock blocks the way ") + dirName + ("."),
+		std::string("To the ") + dirName + (", moss-covered bricks form an impassable barrier.")
 	};
 	return wallDescs[rng.NextInt(0, static_cast<int>(wallDescs.size()) - 1)];
 }
@@ -217,8 +241,36 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 		Direction dir = static_cast<Direction>(d);
 
 		if (!currentRoom.HasExit(dir)) {
-			// Wall -- always visible
-			std::string desc = DescribeWall(dir);
+			// Wall -- we may be looking at a hidden/breakable wall
+			int nx = currentRoom.x;
+			int ny = currentRoom.y;
+			switch (dir) {
+			case Direction::North: ny--; break;
+			case Direction::South: ny++; break;
+			case Direction::East:  nx++; break;
+			case Direction::West:  nx--; break;
+			}
+
+			bool inBounds = !(nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize);
+			bool hasHidden = false;
+			int toughness = 0;
+			if (inBounds) {
+				// Check either the current room's hidden flag in that direction (preferred)
+				// or the adjacent room's opposite hidden flag (symmetry).
+				if (currentRoom.HasHiddenExit(dir)) {
+					hasHidden = true;
+					toughness = currentRoom.GetHiddenToughness(dir);
+				}
+				else {
+					const Room& adj = grid[ny][nx];
+					if (adj.HasHiddenExit(OppositeDirection(dir))) {
+						hasHidden = true;
+						toughness = adj.GetHiddenToughness(OppositeDirection(dir));
+					}
+				}
+			}
+
+			std::string desc = DescribeWall(dir, hasHidden, toughness);
 			std::cout << "    " << desc << "\n";
 			continue;
 		}

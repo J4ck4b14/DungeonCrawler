@@ -1,18 +1,4 @@
 // Spell.h
-// -------
-// Defines the spell system for DungeonCrawler.
-//
-// SpellElement: Fire, Ice, Lightning, Healing, Shadow, Arcane.
-//   Each enemy has a weakness to one element (1.5x damage).
-//
-// SpellTarget: Enemy (damage) or Self (heal/buff).
-//
-// The master spell catalog (GetSpellCatalog) contains all spells in the game,
-// organized by element and tier. Spells have an intelligence requirement
-// to learn -- the player can acquire spells by defeating enemies that know them.
-//
-// FindSpell() looks up a spell by name from the catalog.
-
 #pragma once
 #include <string>
 #include <vector>
@@ -34,11 +20,17 @@ enum class SpellTarget {
 
 struct Spell {
 	std::string name;
-	SpellElement element;
-	SpellTarget target;
-	int manaCost;
-	int power;             // Damage or heal amount (base)
-	int requiredIntelligence; // Minimum INT to learn/use
+	SpellElement element = SpellElement::Arcane;   // default safe value
+	SpellTarget target = SpellTarget::Enemy;       // default safe value
+	int manaCost = 0;
+	int power = 0;             // Damage or heal amount (base)
+	int requiredIntelligence = 0; // Minimum INT to learn/use
+
+	// Explicit constructor to guarantee initialization in all code paths
+	Spell() = default;
+	Spell(const std::string& n, SpellElement e, SpellTarget t, int m, int p, int req)
+		: name(n), element(e), target(t), manaCost(m), power(p), requiredIntelligence(req) {
+	}
 
 	std::string GetElementName() const {
 		switch (element) {
@@ -57,38 +49,37 @@ struct Spell {
 inline const std::vector<Spell>& GetSpellCatalog() {
 	static const std::vector<Spell> catalog = {
 		// -- Offensive: Fire --
-		{"Fireball",       SpellElement::Fire,      SpellTarget::Enemy, 3,   6, 2},
-		{"Inferno",        SpellElement::Fire,      SpellTarget::Enemy, 6,  12, 4},
-		{"Flame Lance",    SpellElement::Fire,      SpellTarget::Enemy, 4,   8, 3},
+		Spell{"Fireball",       SpellElement::Fire,      SpellTarget::Enemy, 3,   6, 2},
+		Spell{"Inferno",        SpellElement::Fire,      SpellTarget::Enemy, 6,  12, 4},
+		Spell{"Flame Lance",    SpellElement::Fire,      SpellTarget::Enemy, 4,   8, 3},
 
 		// -- Offensive: Ice --
-		{"Frost Bolt",     SpellElement::Ice,       SpellTarget::Enemy, 2,   4, 1},
-		{"Blizzard",       SpellElement::Ice,       SpellTarget::Enemy, 7,  14, 5},
-		{"Ice Shard",      SpellElement::Ice,       SpellTarget::Enemy, 3,   6, 2},
+		Spell{"Frost Bolt",     SpellElement::Ice,       SpellTarget::Enemy, 2,   4, 1},
+		Spell{"Blizzard",       SpellElement::Ice,       SpellTarget::Enemy, 7,  14, 5},
+		Spell{"Ice Shard",      SpellElement::Ice,       SpellTarget::Enemy, 3,   6, 2},
 
 		// -- Offensive: Lightning --
-		{"Spark",          SpellElement::Lightning,  SpellTarget::Enemy, 1,   3, 1},
-		{"Thunderbolt",    SpellElement::Lightning,  SpellTarget::Enemy, 5,  10, 3},
-		{"Chain Lightning",SpellElement::Lightning,  SpellTarget::Enemy, 8,  16, 5},
+		Spell{"Spark",          SpellElement::Lightning,  SpellTarget::Enemy, 1,   3, 1},
+		Spell{"Thunderbolt",    SpellElement::Lightning,  SpellTarget::Enemy, 5,  10, 3},
+		Spell{"Chain Lightning",SpellElement::Lightning,  SpellTarget::Enemy, 8,  16, 5},
 
 		// -- Offensive: Shadow --
-		{"Shadow Bolt",    SpellElement::Shadow,     SpellTarget::Enemy, 3,   5, 2},
-		{"Void Blast",     SpellElement::Shadow,     SpellTarget::Enemy, 6,  12, 4},
-		{"Soul Drain",     SpellElement::Shadow,     SpellTarget::Enemy, 4,   7, 3},
+		Spell{"Shadow Bolt",    SpellElement::Shadow,     SpellTarget::Enemy, 3,   5, 2},
+		Spell{"Void Blast",     SpellElement::Shadow,     SpellTarget::Enemy, 6,  12, 4},
+		Spell{"Soul Drain",     SpellElement::Shadow,     SpellTarget::Enemy, 4,   7, 3},
 
 		// -- Offensive: Arcane --
-		{"Magic Missile",  SpellElement::Arcane,     SpellTarget::Enemy, 1,   3, 1},
-		{"Arcane Burst",   SpellElement::Arcane,     SpellTarget::Enemy, 5,  10, 3},
+		Spell{"Magic Missile",  SpellElement::Arcane,     SpellTarget::Enemy, 1,   3, 1},
+		Spell{"Arcane Burst",   SpellElement::Arcane,     SpellTarget::Enemy, 5,  10, 3},
 
 		// -- Healing --
-		{"Heal",           SpellElement::Healing,    SpellTarget::Self,  2,   8, 1},
-		{"Greater Heal",   SpellElement::Healing,    SpellTarget::Self,  5,  16, 3},
-		{"Rejuvenation",   SpellElement::Healing,    SpellTarget::Self,  3,  12, 2},
+		Spell{"Heal",           SpellElement::Healing,    SpellTarget::Self,  2,   8, 1},
+		Spell{"Greater Heal",   SpellElement::Healing,    SpellTarget::Self,  5,  16, 3},
+		Spell{"Rejuvenation",   SpellElement::Healing,    SpellTarget::Self,  3,  12, 2},
 	};
 	return catalog;
 }
 
-// Look up a spell by exact name from the catalog. Returns nullptr if not found.
 inline const Spell* FindSpell(const std::string& name) {
 	for (const auto& s : GetSpellCatalog()) {
 		if (s.name == name) return &s;

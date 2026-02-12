@@ -2,6 +2,7 @@
 #include "combat/Spell.h"
 #include "items/Item.h"
 #include "utils/Console.h"
+#include "core/DevMode.h"
 #include <iostream>
 #include <limits>
 #include <string>
@@ -31,6 +32,42 @@ void Game::Run() {
 	Stats playerStats = Player::AllocateStats(5);
 	Player player(playerName, playerStats);
 
+	// Developer mode auto-enable when player uses reserved name
+	if (playerName == "Dev11032001") {
+		DevMode::Enable();
+		DevMode::ResetToDefaults();
+		// Provide a small interactive config so the dev can tune quickly
+		std::cout << "\n*** DEV MODE ENABLED for " << playerName << " ***\n";
+		std::cout << "Quick dev options (leave blank to keep defaults):\n";
+		std::cout << "  1) Enemy scale multiplier (current " << DevMode::GetEnemyScale() << ") e.g. 1.5\n";
+		std::cout << "  2) Trap frequency multiplier (current " << DevMode::GetTrapMultiplier() << ") e.g. 2.0\n";
+		std::cout << "  3) Perception penalty (subtract from d20 raw roll) (current "
+			<< DevMode::GetPerceptionPenalty() << ")\n";
+		std::cout << "  4) Reveal map (0 = off, 1 = on) (current " << (DevMode::RevealMapEnabled() ? 1 : 0) << ")\n";
+		std::cout << "  5) Remove starting items (0 = off, 1 = on) (current " << (DevMode::RemoveStartingItems() ? 1 : 0) << ")\n";
+		std::cout << "Enter comma-separated values (e.g. 1.4,1.8,1,0,0) or press Enter: ";
+		std::string line;
+		std::getline(std::cin, line);
+		if (!line.empty()) {
+			// crude parse
+			std::replace(line.begin(), line.end(), ',', ' ');
+			std::istringstream iss(line);
+			float enemyScale = 0.0f, trapMul = 0.0f;
+			int percep = -1, reveal = -1, removeItems = -1;
+			if (iss >> enemyScale) DevMode::SetEnemyScale(enemyScale);
+			if (iss >> trapMul) DevMode::SetTrapMultiplier(trapMul);
+			if (iss >> percep) DevMode::SetPerceptionPenalty(percep);
+			if (iss >> reveal) DevMode::SetRevealMapEnabled(reveal != 0);
+			if (iss >> removeItems) DevMode::SetRemoveStartingItems(removeItems != 0);
+		}
+		std::cout << "Dev mode active. EnemyScale=" << DevMode::GetEnemyScale()
+			<< " TrapMul=" << DevMode::GetTrapMultiplier()
+			<< " PercepPenalty=" << DevMode::GetPerceptionPenalty()
+			<< " RevealMap=" << (DevMode::RevealMapEnabled() ? "ON" : "OFF")
+			<< " RemoveStartItems=" << (DevMode::RemoveStartingItems() ? "ON" : "OFF")
+			<< "\n\n";
+	}
+
 	// Give the player a starting spell if they have intelligence
 	if (player.GetIntelligence() >= 1) {
 		const Spell* startSpell = FindSpell("Magic Missile");
@@ -48,8 +85,10 @@ void Game::Run() {
 	}
 
 	// Give starting items
-	player.GetInventory().AddItem(MakeHealthPotion());
-	player.GetInventory().AddItem(MakeManaPotion());
+	if (!DevMode::IsEnabled() || !DevMode::RemoveStartingItems()) {
+		player.GetInventory().AddItem(MakeHealthPotion());
+		player.GetInventory().AddItem(MakeManaPotion());
+	}
 	Console::PrintSlow("You begin with 1 Health Potion and 1 Mana Potion.");
 	Console::PrintSlow("");
 	Console::PrintSlow("TIP: Use Perception checks to scout rooms before entering!");
