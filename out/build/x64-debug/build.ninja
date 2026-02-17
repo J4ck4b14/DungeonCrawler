@@ -18,7 +18,7 @@
 #############################################
 # Minimal version of Ninja required by this file
 
-ninja_required_version = 1.5
+ninja_required_version = 1.8
 
 
 #############################################
@@ -69,93 +69,128 @@ build rebuild_cache: phony CMakeFiles\rebuild_cache.util
 # =============================================================================
 
 # =============================================================================
+# Object build statements for STATIC_LIBRARY target game_core
+
+
+#############################################
+# Order-only phony target for game_core
+
+build cmake_object_order_depends_target_game_core: phony || .
+
+build src\CMakeFiles\game_core.dir\Utils\RNG.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\Utils\RNG.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\Utils
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\combat\CombatSystem.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\combat\CombatSystem.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\combat
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\core\DevMode.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\core\DevMode.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\core
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\core\Game.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\core\Game.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\core
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\dungeon\Dungeon.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\dungeon\Dungeon.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\dungeon
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\dungeon\Perception.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\dungeon\Perception.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\dungeon
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\entities\Enemy.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\Enemy.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\entities
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\entities\EnemyFactory.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\EnemyFactory.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\entities
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\entities\Entity.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\Entity.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\entities
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\entities\Player.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\Player.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir\entities
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+build src\CMakeFiles\game_core.dir\main.cpp.obj: CXX_COMPILER__game_core_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\main.cpp || cmake_object_order_depends_target_game_core
+  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
+  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  OBJECT_FILE_DIR = src\CMakeFiles\game_core.dir
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_PDB = src\game_core.pdb
+
+
+# =============================================================================
+# Link build statements for STATIC_LIBRARY target game_core
+
+
+#############################################
+# Link the static library src\game_core.lib
+
+build src\game_core.lib: CXX_STATIC_LIBRARY_LINKER__game_core_Debug src\CMakeFiles\game_core.dir\Utils\RNG.cpp.obj src\CMakeFiles\game_core.dir\combat\CombatSystem.cpp.obj src\CMakeFiles\game_core.dir\core\DevMode.cpp.obj src\CMakeFiles\game_core.dir\core\Game.cpp.obj src\CMakeFiles\game_core.dir\dungeon\Dungeon.cpp.obj src\CMakeFiles\game_core.dir\dungeon\Perception.cpp.obj src\CMakeFiles\game_core.dir\entities\Enemy.cpp.obj src\CMakeFiles\game_core.dir\entities\EnemyFactory.cpp.obj src\CMakeFiles\game_core.dir\entities\Entity.cpp.obj src\CMakeFiles\game_core.dir\entities\Player.cpp.obj src\CMakeFiles\game_core.dir\main.cpp.obj
+  LANGUAGE_COMPILE_FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
+  LINK_FLAGS = /machine:x64
+  OBJECT_DIR = src\CMakeFiles\game_core.dir
+  POST_BUILD = cd .
+  PRE_LINK = cd .
+  TARGET_COMPILE_PDB = src\CMakeFiles\game_core.dir\game_core.pdb
+  TARGET_FILE = src\game_core.lib
+  TARGET_PDB = src\game_core.pdb
+
+# =============================================================================
 # Object build statements for EXECUTABLE target DungeonCrawlerPP
 
 
 #############################################
 # Order-only phony target for DungeonCrawlerPP
 
-build cmake_object_order_depends_target_DungeonCrawlerPP: phony || .
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\Utils\RNG.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\Utils\RNG.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\Utils
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\combat\CombatSystem.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\combat\CombatSystem.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\combat
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\core\DevMode.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\core\DevMode.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\core
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\core\Game.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\core\Game.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\core
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\dungeon\Dungeon.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\dungeon\Dungeon.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\dungeon
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\dungeon\Perception.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\dungeon\Perception.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\dungeon
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\entities\Enemy.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\Enemy.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\entities
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\entities\EnemyFactory.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\EnemyFactory.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\entities
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\entities\Entity.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\Entity.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\entities
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
-
-build src\CMakeFiles\DungeonCrawlerPP.dir\entities\Player.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\entities\Player.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
-  FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
-  INCLUDES = -ID:\JAM\Github\DungeonCrawler\src
-  OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
-  OBJECT_FILE_DIR = src\CMakeFiles\DungeonCrawlerPP.dir\entities
-  TARGET_COMPILE_PDB = src\CMakeFiles\DungeonCrawlerPP.dir\
-  TARGET_PDB = src\DungeonCrawlerPP.pdb
+build cmake_object_order_depends_target_DungeonCrawlerPP: phony || cmake_object_order_depends_target_game_core
 
 build src\CMakeFiles\DungeonCrawlerPP.dir\main.cpp.obj: CXX_COMPILER__DungeonCrawlerPP_unscanned_Debug D$:\JAM\Github\DungeonCrawler\src\main.cpp || cmake_object_order_depends_target_DungeonCrawlerPP
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd
@@ -173,10 +208,10 @@ build src\CMakeFiles\DungeonCrawlerPP.dir\main.cpp.obj: CXX_COMPILER__DungeonCra
 #############################################
 # Link the executable src\DungeonCrawlerPP.exe
 
-build src\DungeonCrawlerPP.exe: CXX_EXECUTABLE_LINKER__DungeonCrawlerPP_Debug src\CMakeFiles\DungeonCrawlerPP.dir\Utils\RNG.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\combat\CombatSystem.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\core\DevMode.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\core\Game.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\dungeon\Dungeon.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\dungeon\Perception.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\entities\Enemy.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\entities\EnemyFactory.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\entities\Entity.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\entities\Player.cpp.obj src\CMakeFiles\DungeonCrawlerPP.dir\main.cpp.obj
+build src\DungeonCrawlerPP.exe: CXX_EXECUTABLE_LINKER__DungeonCrawlerPP_Debug src\CMakeFiles\DungeonCrawlerPP.dir\main.cpp.obj | src\game_core.lib || src\game_core.lib
   FLAGS = /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -MDd
   LINK_FLAGS = /machine:x64 /debug /INCREMENTAL /subsystem:console
-  LINK_LIBRARIES = kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib
+  LINK_LIBRARIES = src\game_core.lib  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib
   OBJECT_DIR = src\CMakeFiles\DungeonCrawlerPP.dir
   POST_BUILD = cd .
   PRE_LINK = cd .
@@ -215,6 +250,10 @@ build DungeonCrawlerPP: phony src\DungeonCrawlerPP.exe
 
 build DungeonCrawlerPP.exe: phony src\DungeonCrawlerPP.exe
 
+build game_core: phony src\game_core.lib
+
+build game_core.lib: phony src\game_core.lib
+
 # =============================================================================
 # Folder targets.
 
@@ -230,23 +269,37 @@ build all: phony src\all
 #############################################
 # Folder: D:/JAM/Github/DungeonCrawler/out/build/x64-debug/src
 
-build src\all: phony src\DungeonCrawlerPP.exe
+build src\all: phony src\game_core.lib src\DungeonCrawlerPP.exe
 
 # =============================================================================
 # Built-in targets
 
 
 #############################################
+# Phony target to force glob verification run.
+
+build D$:\JAM\Github\DungeonCrawler\out\build\x64-debug\CMakeFiles\VerifyGlobs.cmake_force: phony
+
+
+#############################################
+# Re-run CMake to check if globbed directories changed.
+
+build D$:\JAM\Github\DungeonCrawler\out\build\x64-debug\CMakeFiles\cmake.verify_globs: VERIFY_GLOBS | D$:\JAM\Github\DungeonCrawler\out\build\x64-debug\CMakeFiles\VerifyGlobs.cmake_force
+  pool = console
+  restat = 1
+
+
+#############################################
 # Re-run CMake if any of its inputs changed.
 
-build build.ninja: RERUN_CMAKE | C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeRCInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\WindowsPaths.cmake CMakeCache.txt CMakeFiles\3.31.6-msvc6\CMakeCXXCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeRCCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeSystem.cmake D$:\JAM\Github\DungeonCrawler\CMakeLists.txt D$:\JAM\Github\DungeonCrawler\src\CMakeLists.txt
+build build.ninja: RERUN_CMAKE D$:\JAM\Github\DungeonCrawler\out\build\x64-debug\CMakeFiles\cmake.verify_globs | C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeRCInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\WindowsPaths.cmake CMakeCache.txt CMakeFiles\3.31.6-msvc6\CMakeCXXCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeRCCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeSystem.cmake D$:\JAM\Github\DungeonCrawler\out\build\x64-debug\CMakeFiles\VerifyGlobs.cmake D$:\JAM\Github\DungeonCrawler\CMakeLists.txt D$:\JAM\Github\DungeonCrawler\src\CMakeLists.txt
   pool = console
 
 
 #############################################
 # A missing CMake input file is not an error.
 
-build C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeRCInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\WindowsPaths.cmake CMakeCache.txt CMakeFiles\3.31.6-msvc6\CMakeCXXCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeRCCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeSystem.cmake D$:\JAM\Github\DungeonCrawler\CMakeLists.txt D$:\JAM\Github\DungeonCrawler\src\CMakeLists.txt: phony
+build C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCXXInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeCommonLanguageInclude.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeGenericSystem.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeInitializeConfigs.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeLanguageInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeRCInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\CMakeSystemSpecificInitialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\CMakeCommonCompilerMacros.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Compiler\MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCXXLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Internal\CMakeCommonLinkerInformation.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Linker\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-Initialize.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC-CXX.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows-MSVC.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\Windows.cmake C$:\Program$ Files\Microsoft$ Visual$ Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.31\Modules\Platform\WindowsPaths.cmake CMakeCache.txt CMakeFiles\3.31.6-msvc6\CMakeCXXCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeRCCompiler.cmake CMakeFiles\3.31.6-msvc6\CMakeSystem.cmake D$:\JAM\Github\DungeonCrawler\out\build\x64-debug\CMakeFiles\VerifyGlobs.cmake D$:\JAM\Github\DungeonCrawler\CMakeLists.txt D$:\JAM\Github\DungeonCrawler\src\CMakeLists.txt: phony
 
 
 #############################################

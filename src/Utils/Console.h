@@ -1,4 +1,7 @@
 // Console.h
+// Cross-platform console utilities.
+// - Native .exe: preserves existing behavior.
+// - Web (Emscripten): prints into a DOM element with id="output" and captures keypresses for QTE.
 // ----------
 // Utility functions for console output control:
 //   - Clear():          Clears the terminal screen.
@@ -16,24 +19,53 @@
 #include <vector>
 #include <random>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 #ifdef _WIN32
 #include <conio.h>
 #endif
 
 namespace Console {
 
+// Clear the screen / output area
 inline void Clear() {
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		var el = document.getElementById('output');
+		if (el) el.textContent = '';
+		else console.clear();
+	});
+#else
 #ifdef _WIN32
 	std::system("cls");
 #else
 	std::system("clear");
 #endif
+#endif
 }
 
+// Print a line then pause for delayMs milliseconds
 inline void PrintSlow(const std::string& text, int delayMs = 600) {
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		var s = UTF8ToString($0);
+		var el = document.getElementById('output');
+		if (el) {
+			el.textContent += s + "\n";
+			el.scrollTop = el.scrollHeight;
+		} else {
+			console.log(s);
+		}
+	}, text.c_str());
+	// Keep a small delay so pacing feels similar to console version.
+	std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+#else
 	std::cout << text << "\n";
 	std::cout.flush();
 	std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+#endif
 }
 
 inline void PrintSlowLines(const std::initializer_list<std::string>& lines, int delayMs = 600) {
@@ -42,26 +74,158 @@ inline void PrintSlowLines(const std::initializer_list<std::string>& lines, int 
 	}
 }
 
+// Blocking "Press Enter" behaviour.
+// On web we use prompt()/alert() to emulate blocking input so existing game flow continues.
 inline void WaitForEnter(const std::string& prompt = "  Press Enter to continue...") {
+#ifdef __EMSCRIPTEN__
+	// Use a blocking prompt so emscripten execution pauses until user responds.
+	EM_ASM({
+		var p = UTF8ToString($0);
+		// Use prompt for better UX (shows input box). If prompt is unavailable, fallback to alert.
+		try {
+			prompt(p);
+		} catch (e) {
+			alert(p);
+		}
+	}, prompt.c_str());
+#else
 	if (std::cin.rdbuf()->in_avail() > 0 || std::cin.peek() == '\n') {
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 	}
 	std::cout << prompt;
 	std::cout.flush();
 	std::cin.get();
+#endif
 }
 
 // Heartbeat QTE death-save.
 // Shows a sequence of digits (1-3) one or two at a time on a rhythmic beat.
 // Player must press the matching key within the time window for each beat.
-// timeWindowMs shrinks with each death save (pass deathSaveCount to scale).
 // Returns true if the player matches the entire sequence.
 //
 // sequence: vector of digits (1-3) to display
 // beatMs:   base time between beats (heartbeat rhythm)
 // windowMs: time the player has to press the correct key per beat
 inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windowMs) {
+#ifdef __EMSCRIPTEN__
+	// Install a temporary key listener that stores the last numeric key pressed (1-3) in window.__qte_last.
+	EM_ASM({
+		window.__qte_last = -1;
+		// create a unique listener so we can remove it reliably
+		window.__qte_listener = function(e) {
+			if (e.key >= '1' && e.key <= '3') {
+				window.__qte_last = e.key.charCodeAt(0);
+			}
+		};
+		window.addEventListener('keydown', window.__qte_listener);
+	});
+
+	// Ensure any previous buffered key is cleared
+	EM_ASM({ window.__qte_last = -1; });
+
+	for (size_t i = 0; i < sequence.size(); ++i) {
+		int digit = sequence[i];
+
+		// Heartbeat pause
+		std::this_thread::sleep_for(std::chrono::milliseconds(beatMs));
+
+		// Flash the digit briefly (not the whole sequence). Append to output so it mirrors the console.
+		std::string digitStr = std::to_string(digit);
+		EM_ASM({
+			var s = UTF8ToString($0);
+			var el = document.getElementById('output');
+			if (el) {
+				el.textContent += "    ...thump...  [ " + s + " ]  \n";
+				el.scrollTop = el.scrollHeight;
+			} else {
+				console.log("...thump...  [ " + s + " ]");
+			}
+		}, digitStr.c_str());
+
+		// Reset buffered key before waiting
+		EM_ASM({ window.__qte_last = -1; });
+
+		// Wait for keypress within windowMs, polling the JS variable
+		auto start = std::chrono::steady_clock::now();
+		bool matched = false;
+
+		while (true) {
+			auto elapsed = std::chrono::steady_clock::now() - start;
+			int elapsedMs = static_cast<int>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+			if (elapsedMs >= windowMs) {
+				break; // time's up for this beat
+			}
+
+			// poll last key
+			int jsKey = EM_ASM_INT({
+				return (typeof window.__qte_last === 'number') ? window.__qte_last : -1;
+			});
+			if (jsKey != -1) {
+				// normalize and clear immediately
+				EM_ASM({ window.__qte_last = -1; });
+				if (jsKey == ('0' + digit)) {
+					// correct key
+					matched = true;
+					EM_ASM({
+						var el = document.getElementById('output');
+						if (el) { el.textContent += " *\n"; el.scrollTop = el.scrollHeight; }
+						else console.log(" *");
+					});
+					break;
+				} else {
+					// wrong key -> immediate fail
+					EM_ASM({
+						var el = document.getElementById('output');
+						if (el) { el.textContent += " X\n"; el.scrollTop = el.scrollHeight; }
+						else console.log(" X");
+					});
+					// remove listener and return
+					EM_ASM({
+						if (window.__qte_listener) {
+							window.removeEventListener('keydown', window.__qte_listener);
+							window.__qte_listener = null;
+						}
+						window.__qte_last = -1;
+					});
+					return false;
+				}
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+
+		if (!matched) {
+			EM_ASM({
+				var el = document.getElementById('output');
+				if (el) { el.textContent += " X\n"; el.scrollTop = el.scrollHeight; }
+				else console.log(" X");
+			});
+			EM_ASM({ 
+				if (window.__qte_listener) {
+					window.removeEventListener('keydown', window.__qte_listener);
+					window.__qte_listener = null;
+				}
+				window.__qte_last = -1;
+			});
+			return false;
+		}
+	}
+
+	// Remove listener and clean up
+	EM_ASM({
+		if (window.__qte_listener) {
+			window.removeEventListener('keydown', window.__qte_listener);
+			window.__qte_listener = null;
+		}
+		window.__qte_last = -1;
+	});
+
+	return true;
+
+#else
 #ifdef _WIN32
+	// Windows console implementation using kbhit/getch (keeps older behavior)
 	// Flush any buffered keypresses
 	while (_kbhit()) (void)_getch();
 
@@ -125,10 +289,7 @@ inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windo
 	return true; // All beats matched!
 
 #else
-	// Non-Windows fallback: no _kbhit available, so use a d20 roll.
-	// The windowMs parameter encodes difficulty — lower window = more death saves used.
-	// Threshold: succeed on 10 + deathCount.
-	// We derive deathCount from the window: base is 1000, -100 per save.
+	// Non-Windows fallback: preserve existing d20/random fallback for terminals lacking kbhit
 	int deathCount = (1000 - windowMs) / 100;
 	int threshold = 10 + deathCount;
 	if (threshold > 19) threshold = 19; // Always a chance on nat 20
@@ -156,6 +317,7 @@ inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windo
 		std::cout << "  ...not enough.\n";
 		return false;
 	}
+#endif
 #endif
 }
 
