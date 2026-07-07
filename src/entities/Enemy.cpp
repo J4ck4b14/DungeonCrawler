@@ -49,7 +49,7 @@ TurnAction Enemy::DecideTurn() {
 	// 20% chance to defend, 80% to attack
 	if (rng.Chance(0.2f)) {
 		action.type = ActionType::Defend;
-		// Pick a random stance — but DON'T reveal it
+		// Pick a random stance â€” but DON'T reveal it
 		int stance = rng.NextInt(0, 3);
 		switch (stance) {
 		case 0: action.defenseStance = DefenseStance::AntiSlash; break;
@@ -57,7 +57,7 @@ TurnAction Enemy::DecideTurn() {
 		case 2: action.defenseStance = DefenseStance::AntiBash; break;
 		case 3: action.defenseStance = DefenseStance::AntiMagic; break;
 		}
-		// Vague defend flavor — never reveals what they're bracing for
+		// Vague defend flavor â€” never reveals what they're bracing for
 		std::vector<std::string> defLines = {
 			name_ + " raises their guard, watching carefully...",
 			name_ + " shifts into a defensive posture.",
@@ -70,7 +70,7 @@ TurnAction Enemy::DecideTurn() {
 	}
 	else {
 		action.type = ActionType::Attack;
-		// Pick a random attack style — reveal is vague, don't say the style directly
+		// Pick a random attack style â€” reveal is vague, don't say the style directly
 		int style = rng.NextInt(0, 2);
 		switch (style) {
 		case 0:
@@ -83,7 +83,7 @@ TurnAction Enemy::DecideTurn() {
 			action.attackStyle = AttackStyle::Bash;
 			break;
 		}
-		// Generic attack flavor — style is hidden
+		// Generic attack flavor â€” style is hidden
 		std::vector<std::string> atkLines = {
 			name_ + " lunges forward!",
 			name_ + " attacks!",

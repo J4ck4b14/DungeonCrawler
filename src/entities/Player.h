@@ -11,6 +11,7 @@
 #pragma once
 #include "Entity.h"
 #include "items/Inventory.h"
+#include "core/Relic.h"
 
 class Player : public Entity {
 public:
@@ -50,6 +51,11 @@ public:
 	int GetDeathSaveCount() const;
 	void IncrementDeathSave();
 
+	// Relic system (roguelike boons chosen after each floor)
+	bool HasRelic(RelicId id) const;
+	void GrantRelic(RelicId id);
+	const std::vector<RelicId>& GetRelics() const;
+
 private:
 	Inventory inventory_;
 	int xp_ = 0;
@@ -58,6 +64,11 @@ private:
 	int trainingPoints_ = 0;      // Total training bonuses used (cap 3)
 	static const int MAX_TRAINING = 3;
 	int deathSaveCount_ = 0;      // How many times the player has cheated death
+	std::vector<RelicId> relics_; // Relics collected this run
+	int relicMaxHpMod_ = 0;       // Net max-HP change from relics (survives level-ups)
+
+	// Re-derive maxHp/maxMana and re-apply relic HP modifiers
+	void RecalcDerivedWithRelics();
 
 	void CheckLevelUp();
 	static int XPForLevel(int level);

@@ -20,20 +20,37 @@
 #include <conio.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include "platform/WebConsole.h"
+#endif
+
 namespace Console {
 
 inline void Clear() {
-#ifdef _WIN32
+#if defined(__EMSCRIPTEN__)
+	// ANSI: clear screen + scrollback, cursor home (handled by xterm.js)
+	std::cout << "\x1b[2J\x1b[3J\x1b[H";
+	std::cout.flush();
+#elif defined(_WIN32)
 	std::system("cls");
 #else
 	std::system("clear");
 #endif
 }
 
+// Sleep that is safe on every platform (never blocks the browser tab).
+inline void Sleep(int ms) {
+#ifdef __EMSCRIPTEN__
+	WebConsole::Sleep(ms);
+#else
+	std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+#endif
+}
+
 inline void PrintSlow(const std::string& text, int delayMs = 600) {
 	std::cout << text << "\n";
 	std::cout.flush();
-	std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+	Sleep(delayMs);
 }
 
 inline void PrintSlowLines(const std::initializer_list<std::string>& lines, int delayMs = 600) {
@@ -43,12 +60,21 @@ inline void PrintSlowLines(const std::initializer_list<std::string>& lines, int 
 }
 
 inline void WaitForEnter(const std::string& prompt = "  Press Enter to continue...") {
+#ifdef __EMSCRIPTEN__
+	// Discard any leftover buffered input, then wait for a fresh line.
+	while (std::cin.rdbuf()->in_avail() > 0) std::cin.get();
+	std::cout << prompt;
+	std::cout.flush();
+	std::cin.get();
+	while (std::cin.rdbuf()->in_avail() > 0) std::cin.get();
+#else
 	if (std::cin.rdbuf()->in_avail() > 0 || std::cin.peek() == '\n') {
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 	}
 	std::cout << prompt;
 	std::cout.flush();
 	std::cin.get();
+#endif
 }
 
 // Heartbeat QTE death-save.
@@ -61,14 +87,40 @@ inline void WaitForEnter(const std::string& prompt = "  Press Enter to continue.
 // beatMs:   base time between beats (heartbeat rhythm)
 // windowMs: time the player has to press the correct key per beat
 inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windowMs) {
-#ifdef _WIN32
+#if defined(__EMSCRIPTEN__)
+	// Real-time QTE in the browser: same rules as the Windows version.
+	for (size_t i = 0; i < sequence.size(); ++i) {
+		int digit = sequence[i];
+
+		Sleep(beatMs);
+
+		std::cout << "\r                                        \r";
+		std::cout << "    ...thump...  [ " << digit << " ]  ";
+		std::cout.flush();
+
+		int ch = WebConsole::WaitKey(windowMs);
+		if (ch != ('0' + digit)) {
+			// Timeout (0) or wrong key: fail
+			std::cout << " X";
+			std::cout.flush();
+			Sleep(300);
+			std::cout << "\n";
+			return false;
+		}
+		std::cout << " *";
+		std::cout.flush();
+	}
+	std::cout << "\n";
+	return true;
+
+#elif defined(_WIN32)
 	// Flush any buffered keypresses
 	while (_kbhit()) (void)_getch();
 
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		int digit = sequence[i];
 
-		// Display the beat — dramatic heartbeat pause then show the number
+		// Display the beat â€” dramatic heartbeat pause then show the number
 		std::this_thread::sleep_for(std::chrono::milliseconds(beatMs));
 
 		// Show the digit with a heartbeat-style display
@@ -100,7 +152,7 @@ inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windo
 					break;
 				}
 				else {
-					// Wrong key — fail immediately
+					// Wrong key â€” fail immediately
 					std::cout << " X";
 					std::cout.flush();
 					std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -126,7 +178,7 @@ inline bool HeartbeatQTE(const std::vector<int>& sequence, int beatMs, int windo
 
 #else
 	// Non-Windows fallback: no _kbhit available, so use a d20 roll.
-	// The windowMs parameter encodes difficulty — lower window = more death saves used.
+	// The windowMs parameter encodes difficulty â€” lower window = more death saves used.
 	// Threshold: succeed on 10 + deathCount.
 	// We derive deathCount from the window: base is 1000, -100 per save.
 	int deathCount = (1000 - windowMs) / 100;

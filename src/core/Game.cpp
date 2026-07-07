@@ -4,6 +4,8 @@
 #include "utils/Console.h"
 #include "core/DevMode.h"
 #include <iostream>
+#include <sstream>
+#include <algorithm>
 #include <limits>
 #include <string>
 

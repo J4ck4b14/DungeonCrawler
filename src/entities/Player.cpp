@@ -7,13 +7,14 @@
 #include "Player.h"
 #include <iostream>
 #include <limits>
+#include <algorithm>
 
 Player::Player(const std::string& name, const Stats& stats)
 	: Entity(name, stats), rawHp_(stats.hp) {}
 
 int Player::XPForLevel(int level) {
-	// XP thresholds: 30, 70, 120, 180, 250, ...
-	return 10 * level + 20 * level;
+	// XP thresholds: 30, 70, 120, 180, 250, ... (5L^2 + 25L)
+	return 5 * level * level + 25 * level;
 }
 
 Stats Player::AllocateStats(int pool) {
@@ -100,7 +101,7 @@ void Player::AllocateLevelUpPoints() {
 	stats_.atk += atkBonus * 2;
 	stats_.speed += spdBonus;
 	stats_.intelligence += intBonus;
-	stats_.RecalculateDerived();
+	RecalcDerivedWithRelics();
 
 	// Heal to new max on level up
 	currentHp_ = stats_.maxHp;
@@ -139,6 +140,52 @@ bool Player::CanTrain() const { return trainingPoints_ < MAX_TRAINING; }
 int Player::GetDeathSaveCount() const { return deathSaveCount_; }
 void Player::IncrementDeathSave() { deathSaveCount_++; }
 
+// -- Relic system --
+
+bool Player::HasRelic(RelicId id) const {
+	for (RelicId r : relics_) if (r == id) return true;
+	return false;
+}
+
+const std::vector<RelicId>& Player::GetRelics() const { return relics_; }
+
+void Player::RecalcDerivedWithRelics() {
+	stats_.RecalculateDerived();
+	stats_.maxHp += relicMaxHpMod_;
+	if (stats_.maxHp < 5) stats_.maxHp = 5;   // Never relic yourself below 5 HP
+	if (currentHp_ > stats_.maxHp) currentHp_ = stats_.maxHp;
+	if (currentMana_ > stats_.maxMana) currentMana_ = stats_.maxMana;
+}
+
+void Player::GrantRelic(RelicId id) {
+	if (HasRelic(id)) return;
+	relics_.push_back(id);
+
+	switch (id) {
+	case RelicId::BerserkersBrand:
+		stats_.atk += 3;
+		relicMaxHpMod_ -= 6;
+		break;
+	case RelicId::GiantsBelt:
+		relicMaxHpMod_ += 18;
+		stats_.atk = std::max(1, stats_.atk - 1);
+		break;
+	case RelicId::AdrenalGland:
+		stats_.speed += 1;
+		relicMaxHpMod_ -= 4;
+		break;
+	case RelicId::ScholarsMonocle:
+		stats_.intelligence += 2;
+		relicMaxHpMod_ -= 4;
+		break;
+	default:
+		break; // Combat-hook relics have no immediate stat effect
+	}
+	RecalcDerivedWithRelics();
+	// Taking Giant's Belt grants its HP immediately
+	if (id == RelicId::GiantsBelt) currentHp_ = std::min(currentHp_ + 18, stats_.maxHp);
+}
+
 void Player::TrainStat(int statChoice) {
 	if (!CanTrain()) return;
 	trainingPoints_++;
@@ -146,7 +193,7 @@ void Player::TrainStat(int statChoice) {
 	case 1: // Health
 		rawHp_++;
 		stats_.hp = rawHp_;
-		stats_.RecalculateDerived();
+		RecalcDerivedWithRelics();
 		currentHp_ = std::min(currentHp_ + 5, stats_.maxHp); // Gain the 5 HP immediately
 		std::cout << "  You train your endurance. +5 max HP!\n";
 		break;
@@ -160,7 +207,7 @@ void Player::TrainStat(int statChoice) {
 		break;
 	case 4: // Intelligence
 		stats_.intelligence += 1;
-		stats_.RecalculateDerived();
+		RecalcDerivedWithRelics();
 		currentMana_ = std::min(currentMana_ + 3, stats_.maxMana);
 		std::cout << "  You meditate and expand your mind. +1 INT, +3 max Mana!\n";
 		break;
@@ -200,7 +247,7 @@ TurnAction Player::DecideTurn() {
 		action.type = ActionType::Attack;
 		std::cout << "  Choose attack style:\n";
 		std::cout << "    1. Slash  (1.0x ATK, 15% crit for 1.5x)\n";
-		std::cout << "    2. Thrust (0.8x ATK, ignores defense; 1.0x vs defenders)\n";
+		std::cout << "    2. Thrust (0.8x ATK; 1.0x + pierce vs WRONG stance, parryable by Anti-Thrust)\n";
 		std::cout << "    3. Bash   (1.3x ATK, 15% whiff + self-damage)\n";
 		std::cout << "    > ";
 		int atkChoice = 0;
@@ -346,4 +393,12 @@ void Player::PrintStatus() const {
 		<< " | SPD: " << stats_.speed
 		<< " | INT: " << stats_.intelligence
 		<< " | XP: " << xp_ << "/" << XPForLevel(level_) << "\n";
+	if (!relics_.empty()) {
+		std::cout << "  Relics: ";
+		for (size_t i = 0; i < relics_.size(); ++i) {
+			std::cout << GetRelicInfo(relics_[i]).name;
+			if (i + 1 < relics_.size()) std::cout << ", ";
+		}
+		std::cout << "\n";
+	}
 }

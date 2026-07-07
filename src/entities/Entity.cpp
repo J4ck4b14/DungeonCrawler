@@ -67,8 +67,12 @@ bool Entity::KnowsSpell(const std::string& name) const {
 }
 
 int Entity::ActionsPerRound(int otherSpeed) const {
-	if (otherSpeed <= 0) return 1;
-	return std::max(1, stats_.speed / otherSpeed);
+	// You get a second action only when your speed is at least DOUBLE the
+	// opponent's, and never more than 2 actions. Speed stays valuable
+	// (turn order + the double-up threshold) without snowballing into
+	// machine-gun rounds.
+	if (otherSpeed <= 0) otherSpeed = 1;
+	return (stats_.speed >= otherSpeed * 2) ? 2 : 1;
 }
 
 void Entity::ApplyAttackBuff(int bonus, int hits, bool magical) {

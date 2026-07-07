@@ -1,4 +1,4 @@
-﻿// CombatSystem.cpp
+// CombatSystem.cpp
 // -----------------
 // Resolves turn-based combat between the player and an enemy.
 //
@@ -26,6 +26,7 @@
 #include "core/Bestiary.h"
 #include "utils/RNG.h"
 #include "utils/Console.h"
+#include "core/Relic.h"
 #include <iostream>
 #include <algorithm>
 #include <set>
@@ -43,6 +44,32 @@ static bool IsPhysicalParry(DefenseStance stance, AttackStyle style) {
 	return (stance == DefenseStance::AntiSlash  && style == AttackStyle::Slash)
 		|| (stance == DefenseStance::AntiThrust && style == AttackStyle::Thrust)
 		|| (stance == DefenseStance::AntiBash   && style == AttackStyle::Bash);
+}
+
+// ---- On-hit relic effects (physical damage only) ----
+// attacker dealt `dmgDealt` to target. Handles:
+//   Vampiric Fang    (player attacking): heal 20% of damage dealt
+//   Thorned Carapace (player defending): attacker takes 3 damage
+static void ApplyOnHitRelics(Entity& attacker, Entity& target, int dmgDealt, bool attackerIsPlayer) {
+	if (dmgDealt <= 0) return;
+
+	if (attackerIsPlayer) {
+		Player& p = static_cast<Player&>(attacker);
+		if (p.HasRelic(RelicId::VampiricFang)) {
+			int heal = std::max(1, dmgDealt / 5);
+			p.Heal(heal);
+			Console::PrintSlow("  (Vampiric Fang drinks deep: +" + std::to_string(heal) + " HP)");
+		}
+	}
+	else {
+		// Enemy hit the player
+		Player& p = static_cast<Player&>(target);
+		if (p.HasRelic(RelicId::ThornedCarapace) && attacker.IsAlive()) {
+			attacker.ReceiveDamage(3);
+			Console::PrintSlow("  (Thorned Carapace bites back: 3 damage to "
+				+ attacker.GetName() + "!)");
+		}
+	}
 }
 
 // ---- Execute a single action ----
@@ -64,13 +91,18 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 
 		// -- Calculate damage based on style --
 		switch (action.attackStyle) {
-		case AttackStyle::Slash:
+		case AttackStyle::Slash: {
 			dmg = baseAtk;
-			if (rng.Chance(0.15f)) {
+			float critChance = 0.15f;
+			// Lucky Coin: doubled crit chance for the player
+			if (isPlayer && static_cast<Player&>(actor).HasRelic(RelicId::LuckyCoin))
+				critChance = 0.30f;
+			if (rng.Chance(critChance)) {
 				dmg = static_cast<int>(baseAtk * 1.5f);
 				crit = true;
 			}
 			break;
+		}
 		case AttackStyle::Thrust:
 			dmg = target.IsDefending()
 				? baseAtk                              // Full damage vs defenders
@@ -94,6 +126,14 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 		}
 
 		if (isPlayer) stats.RecordPhysicalAttack();
+
+		// Executioner's Edge: +50% physical damage vs enemies below 30% HP
+		if (isPlayer && !missed && enemyTarget
+			&& static_cast<Player&>(actor).HasRelic(RelicId::ExecutionersEdge)
+			&& enemyTarget->GetHP() * 10 < enemyTarget->GetMaxHP() * 3) {
+			dmg = static_cast<int>(dmg * 1.5f);
+			Console::PrintSlow("  (Executioner's Edge: the wounded foe is exposed!)");
+		}
 
 		// -- Bash whiff --
 		if (missed) {
@@ -154,10 +194,13 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 		Console::PrintSlow("  " + hitMsg);
 
 		// -- Apply damage, handle defense/parry --
+		// A correct stance parries ANY physical style, including Thrust.
+		// Thrust's edge: against a WRONG stance it pierces (full damage,
+		// no halving), where Slash/Bash get halved.
 		bool ignoreDefense = (action.attackStyle == AttackStyle::Thrust);
 
 		if (target.IsDefending()) {
-			if (!ignoreDefense && IsPhysicalParry(target.GetDefenseStance(), action.attackStyle)) {
+			if (IsPhysicalParry(target.GetDefenseStance(), action.attackStyle)) {
 				// PARRY! Zero damage, full counter
 				Console::PrintSlow("  " + PickRandom({
 					"** PARRY! " + target.GetName() + " read the attack perfectly! **",
@@ -177,7 +220,7 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 				// Defender takes 0 damage
 			}
 			else if (ignoreDefense) {
-				// Thrust pierces defense entirely
+				// Thrust vs a wrong stance: pierces entirely
 				bool wasDefending = target.IsDefending();
 				target.SetDefending(false);
 				target.ReceiveDamage(dmg);
@@ -185,13 +228,16 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 				Console::PrintSlow("  (Thrust pierces through the defense!)");
 				if (isPlayer) stats.totalDamageDealt += dmg;
 				if (!isPlayer) stats.totalDamageTaken += dmg;
+				ApplyOnHitRelics(actor, target, dmg, isPlayer);
 			}
 			else {
-				// Wrong guess: halve damage, no counter
-				target.ReceiveDamage(dmg);
+				// Wrong guess vs Slash/Bash: halve damage, no counter
+				int actualDmg = dmg / 2;
+				target.ReceiveDamage(dmg); // ReceiveDamage halves internally
 				Console::PrintSlow("  (Halved by defense!)");
-				if (isPlayer) stats.totalDamageDealt += dmg;
-				if (!isPlayer) stats.totalDamageTaken += dmg;
+				if (isPlayer) stats.totalDamageDealt += actualDmg;
+				if (!isPlayer) stats.totalDamageTaken += actualDmg;
+				ApplyOnHitRelics(actor, target, actualDmg, isPlayer);
 			}
 		}
 		else {
@@ -199,6 +245,7 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 			target.ReceiveDamage(dmg);
 			if (isPlayer) stats.totalDamageDealt += dmg;
 			if (!isPlayer) stats.totalDamageTaken += dmg;
+			ApplyOnHitRelics(actor, target, dmg, isPlayer);
 		}
 		break;
 	}
@@ -238,7 +285,12 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 			break;
 		}
 		const Spell& spell = spells[action.spellIndex];
-		actor.UseMana(spell.manaCost);
+		int manaCost = spell.manaCost;
+		// Arcane Battery: spells cost 1 less mana (min 1)
+		if (isPlayer && static_cast<Player&>(actor).HasRelic(RelicId::ArcaneBattery)) {
+			manaCost = std::max(1, manaCost - 1);
+		}
+		actor.UseMana(manaCost);
 
 		if (isPlayer) stats.RecordSpellCast(spell.name);
 
@@ -296,15 +348,16 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 			}
 			else if (target.IsDefending()) {
 				// Wrong stance vs magic: halved
-				target.ReceiveDamage(dmg);
+				target.ReceiveDamage(dmg); // ReceiveDamage halves internally
 				Console::PrintSlow("  (Halved by defense!)");
+				if (isPlayer) stats.totalDamageDealt += dmg / 2;
+				if (!isPlayer) stats.totalDamageTaken += dmg / 2;
 			}
 			else {
 				target.ReceiveDamage(dmg);
+				if (isPlayer) stats.totalDamageDealt += dmg;
+				if (!isPlayer) stats.totalDamageTaken += dmg;
 			}
-
-			if (isPlayer) stats.totalDamageDealt += dmg;
-			if (!isPlayer) stats.totalDamageTaken += dmg;
 		}
 		else {
 			// Healing spell
@@ -390,6 +443,12 @@ static bool AttemptDeathSave(Player& player, bool& deathSaveUsed) {
 	int seqLen = std::min(12, 4 + saveCount * 2);
 	int windowMs = std::max(400, 1000 - saveCount * 100);
 	int beatMs = 600;
+
+	// Phoenix Feather: the heart beats slower at death's door
+	if (player.HasRelic(RelicId::PhoenixFeather)) {
+		windowMs += 250;
+		Console::PrintSlow("  (The Phoenix Feather glows warm against your chest...)", 400);
+	}
 
 	std::vector<int> sequence;
 	for (int i = 0; i < seqLen; ++i) {

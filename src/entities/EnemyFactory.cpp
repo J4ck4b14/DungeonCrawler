@@ -15,6 +15,7 @@
 #include "utils/RNG.h"
 #include "combat/Spell.h"
 #include <vector>
+#include <cmath>
 #include "core/DevMode.h"
 
 Enemy EnemyFactory::CreateEnemy(int dungeonLevel) {
@@ -58,27 +59,50 @@ Enemy EnemyFactory::CreateEnemy(int dungeonLevel) {
 		{"Dragon",    50, 70,    8, 12,   2, 4,  4, 6,  8, 70, SpellElement::Ice,       {"Inferno", "Blizzard", "Chain Lightning", "Greater Heal"}},
 	};
 
-	// Filter templates by dungeon level
+	// Filter templates by dungeon level, retiring badly outleveled tiers:
+	// once you are 5+ floors past a tier's unlock, it stops spawning
+	// (tier 1 disappears at floor 6, tier 2 at floor 8, tier 3 at floor 10).
 	std::vector<size_t> eligible;
 	for (size_t i = 0; i < templates.size(); ++i) {
-		if (templates[i].minLevel <= dungeonLevel) {
+		if (templates[i].minLevel <= dungeonLevel
+			&& dungeonLevel - templates[i].minLevel < 5) {
 			eligible.push_back(i);
 		}
 	}
+	// Safety net: never allow an empty pool
+	if (eligible.empty()) {
+		for (size_t i = 0; i < templates.size(); ++i) {
+			if (templates[i].minLevel <= dungeonLevel) eligible.push_back(i);
+		}
+	}
 
-	const auto& tmpl = templates[eligible[rng.NextInt(0, static_cast<int>(eligible.size()) - 1)]];
+	// Weighted pick: higher-tier templates are proportionally more likely,
+	// so the newest threats dominate each floor instead of tier-1 filler.
+	int totalWeight = 0;
+	for (size_t idx : eligible) totalWeight += templates[idx].minLevel * templates[idx].minLevel;
+	int roll = rng.NextInt(1, totalWeight);
+	size_t chosen = eligible.back();
+	for (size_t idx : eligible) {
+		roll -= templates[idx].minLevel * templates[idx].minLevel;
+		if (roll <= 0) { chosen = idx; break; }
+	}
+	const auto& tmpl = templates[chosen];
 
-	// Scale stats slightly with dungeon level
-	float scale = 1.0f + (dungeonLevel - 1) * 0.08f;
+	// Enemy STATS compound 10% per floor (exponential), while XP rewards
+	// scale only linearly. Player power can't keep pace forever -- the
+	// dungeon eventually forms a wall. Every floor you descend past your
+	// limit is greed; escaping alive is the victory. That's the run.
+	float statScale = std::pow(1.10f, static_cast<float>(dungeonLevel - 1));
+	float xpScale = 1.0f + (dungeonLevel - 1) * 0.10f;
 
 	Stats stats;
-	stats.maxHp = static_cast<int>(rng.NextInt(tmpl.minHP, tmpl.maxHP) * scale);
-	stats.atk = static_cast<int>(rng.NextInt(tmpl.minATK, tmpl.maxATK) * scale);
+	stats.maxHp = static_cast<int>(rng.NextInt(tmpl.minHP, tmpl.maxHP) * statScale);
+	stats.atk = static_cast<int>(rng.NextInt(tmpl.minATK, tmpl.maxATK) * statScale);
 	stats.speed = rng.NextInt(tmpl.minSPD, tmpl.maxSPD);
 	stats.intelligence = rng.NextInt(tmpl.minINT, tmpl.maxINT);
 	stats.maxMana = stats.intelligence * 3;
 
-	int xp = static_cast<int>(tmpl.baseXP * scale);
+	int xp = static_cast<int>(tmpl.baseXP * xpScale);
 
 	// Apply dev-mode scaling to make enemies stronger / yield more XP during balancing
 	if (DevMode::IsEnabled()) {

@@ -36,31 +36,31 @@ inline std::string GetDescription(const std::string& enemyName, int playerIntAtD
 			"Green blob. Jiggly. Hit until stop moving.",
 			"A quivering ooze. It lashes out in short, sticky bursts.",
 			"Amorphous protoplasm; slow to react but hard to read. Keep distance when it swells.",
-			"A corrosive gelatinous organism. Observe its rhythmic compression—strike after it expels mass; fire expedites coagulation."
+			"A corrosive gelatinous organism. Observe its rhythmic compressionâ€”strike after it expels mass; fire expedites coagulation."
 		}},
 		{"Rat", {
 			"Big rat. Bite. Fast. Don't let it bite.",
-			"A cavern rat—quick, skittish, and eager to chew ankles.",
+			"A cavern ratâ€”quick, skittish, and eager to chew ankles.",
 			"Nervous but opportunistic. Watch for darting feints; punish the retreat with a decisive hit.",
-			"A territorial rodent with frantic burst movement. It commits fully once engaged—parry the lunge, then counter while it recovers."
+			"A territorial rodent with frantic burst movement. It commits fully once engagedâ€”parry the lunge, then counter while it recovers."
 		}},
 		{"Skeleton", {
 			"Bone man. No meat. Still mean.",
 			"An animated skeleton. Its strikes are stiff, but it doesn't tire.",
-			"Predictable patterns—reads like a metronome. Bait the swing, then respond.",
+			"Predictable patternsâ€”reads like a metronome. Bait the swing, then respond.",
 			"Reanimated osseous construct. Limited joint articulation yields telegraphed arcs; exploit timing windows and disrupt with focused magic."
 		}},
 		{"Spider", {
 			"Many legs. Creepy. Smash it.",
 			"A dungeon spider that moves in short, sudden skitters.",
-			"It tests range before committing. Deny space—one clean hit ends the dance.",
+			"It tests range before committing. Deny spaceâ€”one clean hit ends the dance.",
 			"An ambush-oriented arachnid. It favors lateral repositioning and quick probes; hold a stable guard, then punish overextension."
 		}},
 		{"Goblin", {
 			"Small green guy. Stab. Loud.",
 			"A goblin raider with nasty tricks and sudden courage.",
-			"Cunning for its size—expects you to flinch. Stay calm; it folds under pressure.",
-			"A scavenger-combatant with opportunistic aggression. Do not trade blows—force it into defense, then break tempo with magic."
+			"Cunning for its sizeâ€”expects you to flinch. Stay calm; it folds under pressure.",
+			"A scavenger-combatant with opportunistic aggression. Do not trade blowsâ€”force it into defense, then break tempo with magic."
 		}},
 		{"Bandit", {
 			"Human thief. Wants my stuff.",
@@ -72,30 +72,30 @@ inline std::string GetDescription(const std::string& enemyName, int playerIntAtD
 			"Big angry. Hits hard.",
 			"A brutal orc that favors raw force over finesse.",
 			"Slow to adapt, but a single mistake hurts. Brace, then answer with precision.",
-			"A strength-driven brawler. Its commitment is absolute—let it spend momentum, then exploit recovery with thrusts or focused spells."
+			"A strength-driven brawler. Its commitment is absoluteâ€”let it spend momentum, then exploit recovery with thrusts or focused spells."
 		}},
 		{"Ghost", {
 			"Cold air. Not normal. Bad.",
-			"A restless spirit—its presence chills the room and your thoughts.",
+			"A restless spiritâ€”its presence chills the room and your thoughts.",
 			"Hard to read, but it hesitates before striking. Use that pause.",
 			"An ethereal entity with inconsistent physical tells. Favor magic and maintain composure; its attacks are preceded by a distinct stillness."
 		}},
 		{"Witch", {
 			"Old magic lady. Spells hurt.",
 			"A witch who mixes curses and bursts of elemental power.",
-			"Her casting has rhythm. Break it—pressure her before she completes a volley.",
+			"Her casting has rhythm. Break itâ€”pressure her before she completes a volley.",
 			"A practiced spellcaster. Interrupt cadence: force defensive decisions, then punish mana expenditure with sustained aggression."
 		}},
 		{"Troll", {
 			"Huge. Smells. Tough.",
-			"A troll—slow, stubborn, and terrifying up close.",
+			"A trollâ€”slow, stubborn, and terrifying up close.",
 			"Its swings are wide and costly. Survive the first, then punish the second.",
 			"A heavy-mass predator. It relies on sweeping commitment; bait the strike, evade by stance, then retaliate before it re-centers."
 		}},
 		{"Werewolf", {
 			"Wolf man. Teeth.",
 			"A feral werewolf that attacks in frantic bursts.",
-			"Unstable tempo—fast then suddenly still. Defend during the rush; strike in the quiet.",
+			"Unstable tempoâ€”fast then suddenly still. Defend during the rush; strike in the quiet.",
 			"A volatile apex hunter. Tracks openings instinctively; steady defense and punish after its burst sequence ends."
 		}},
 		{"Vampire", {
@@ -107,14 +107,14 @@ inline std::string GetDescription(const std::string& enemyName, int playerIntAtD
 		{"Dark Mage", {
 			"Scary robe. Magic.",
 			"A dark mage channeling multiple elements with practiced conviction.",
-			"Versatile and dangerous. Anticipate spell variety—defense stance matters.",
+			"Versatile and dangerous. Anticipate spell varietyâ€”defense stance matters.",
 			"A versatile arcane combatant. Expect elemental cycling; counter by reading mana usage and selecting anti-magic defense at high-risk moments."
 		}},
 		{"Demon", {
 			"Horn thing. Very bad.",
-			"A demon—malice made flesh. The air feels wrong around it.",
+			"A demonâ€”malice made flesh. The air feels wrong around it.",
 			"Aggression is its language. Survive the first assault; it bleeds momentum after.",
-			"A hostile outsider with violent initiative. It escalates quickly—prioritize tempo control, defensive prediction, and resource-efficient damage."
+			"A hostile outsider with violent initiative. It escalates quicklyâ€”prioritize tempo control, defensive prediction, and resource-efficient damage."
 		}},
 		{"Giant", {
 			"Too big. Steps shake room.",
@@ -124,9 +124,9 @@ inline std::string GetDescription(const std::string& enemyName, int playerIntAtD
 		}},
 		{"Dragon", {
 			"Dragon. Run?",
-			"A dragon—ancient power with teeth and flame.",
+			"A dragonâ€”ancient power with teeth and flame.",
 			"It controls the fight. You must choose moments carefully and commit hard.",
-			"A pinnacle predator. Its offense dictates the battlefield—prioritize elemental exploitation, stabilize against spikes, and strike only on certainty."
+			"A pinnacle predator. Its offense dictates the battlefieldâ€”prioritize elemental exploitation, stabilize against spikes, and strike only on certainty."
 		}},
 	};
 

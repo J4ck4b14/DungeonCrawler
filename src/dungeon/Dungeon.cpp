@@ -1,4 +1,4 @@
-﻿#include "Dungeon.h"
+#include "Dungeon.h"
 #include "Perception.h"
 #include "entities/EnemyFactory.h"
 #include "combat/CombatSystem.h"
@@ -6,6 +6,7 @@
 #include "utils/RNG.h"
 #include "utils/Console.h"
 #include "core/DevMode.h"
+#include "core/Relic.h"
 #include "combat/Spell.h"
 #include "Room.h"
 #include <iostream>
@@ -691,6 +692,22 @@ bool Dungeon::PromptMovement(Player& player) {
 
 		// Wall attack handler: does physical or magical attempts, mirrors earlier logic
 		auto HandleWallAttack = [&](Direction dir) -> bool {
+			// Walls on the map edge are the dungeon's bedrock: unbreakable.
+			// (Also prevents breaking through and walking off the grid.)
+			{
+				int tx = playerX_, ty = playerY_;
+				switch (dir) {
+				case Direction::North: ty--; break;
+				case Direction::South: ty++; break;
+				case Direction::East:  tx++; break;
+				case Direction::West:  tx--; break;
+				}
+				if (tx < 0 || tx >= gridSize_ || ty < 0 || ty >= gridSize_) {
+					Console::PrintSlow("\n  You strike the " + std::string(DirectionName(dir))
+						+ " wall... solid bedrock. The dungeon itself. Unbreakable.");
+					return true; // Not fatal, just futile
+				}
+			}
 			// prepare wall (create if missing)
 			if (!current.HasHiddenExit(dir)) {
 				EnsureWallExists(current, dir);
@@ -917,6 +934,63 @@ bool Dungeon::PromptMovement(Player& player) {
 	return false;
 }
 
+// ---- Relic offering: the roguelike heart of each run ----
+// After clearing a floor, present 3 random relics the player doesn't own.
+// Take one, or walk away. Choices are permanent -- choose like it matters.
+static void OfferRelicChoice(Player& player, int floorCleared) {
+	// Build the pool of unowned relics
+	std::vector<RelicId> pool;
+	for (const auto& info : AllRelics()) {
+		if (!player.HasRelic(info.id)) pool.push_back(info.id);
+	}
+	if (pool.empty()) return; // Collected everything -- a true dungeon lord
+
+	static RNG relicRng;
+	// Shuffle-lite: pick up to 3 distinct offers
+	std::vector<RelicId> offers;
+	while (offers.size() < 3 && !pool.empty()) {
+		int pick = relicRng.NextInt(0, static_cast<int>(pool.size()) - 1);
+		offers.push_back(pool[pick]);
+		pool.erase(pool.begin() + pick);
+	}
+
+	Console::PrintSlow("");
+	Console::PrintSlow("  In the rubble of floor " + std::to_string(floorCleared)
+		+ ", something glimmers...");
+	Console::PrintSlow("  Ancient relics! You may claim ONE. The rest crumble to dust.");
+	Console::PrintSlow("");
+
+	for (size_t i = 0; i < offers.size(); ++i) {
+		const RelicInfo& info = GetRelicInfo(offers[i]);
+		std::cout << "    " << (i + 1) << ". " << info.name << "\n";
+		std::cout << "       " << info.description << "\n";
+	}
+	std::cout << "    " << (offers.size() + 1) << ". Leave them. (No relic)\n";
+	std::cout << "    > ";
+
+	int choice = 0;
+	std::cin >> choice;
+	while (std::cin.fail() || choice < 1 || choice > static_cast<int>(offers.size()) + 1) {
+		std::cin.clear();
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		std::cout << "    Enter 1-" << (offers.size() + 1) << ": ";
+		std::cin >> choice;
+	}
+
+	if (choice <= static_cast<int>(offers.size())) {
+		RelicId picked = offers[choice - 1];
+		player.GrantRelic(picked);
+		const RelicInfo& info = GetRelicInfo(picked);
+		Console::PrintSlow("");
+		Console::PrintSlow("  ** " + std::string(info.name) + " claimed! **");
+		Console::PrintSlow("  " + std::string(info.description));
+	}
+	else {
+		Console::PrintSlow("");
+		Console::PrintSlow("  You resist temptation. The relics turn to dust behind you.");
+	}
+}
+
 bool Dungeon::RunFloor(Player& player) {
 	GenerateFloor();
 	seenEnemyTypes_.clear();
@@ -960,6 +1034,9 @@ bool Dungeon::RunFloor(Player& player) {
 		player.GainXP(bonusXP);
 
 		Console::PrintSlow("==================================");
+
+		// Roguelike relic choice -- one per floor cleared
+		OfferRelicChoice(player, currentLevel_);
 
 		int restHp = 5 + currentLevel_;
 		int restMana = 3 + currentLevel_ / 2;
