@@ -1,12 +1,13 @@
 # src/CMakeLists.txt
 
-file(GLOB_RECURSE SRC_FILES
+file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
     "*.cpp"
     "*.h"
 )
 
-# Ensure DevMode implementation is included even if glob misses it
-list(APPEND SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/core/DevMode.cpp")
+# Generated compiler-identification sources under an in-tree build directory
+# define their own main() and must never become part of the game target.
+list(FILTER SRC_FILES EXCLUDE REGEX "/out/")
 
 add_executable(DungeonCrawlerPP ${SRC_FILES})
 

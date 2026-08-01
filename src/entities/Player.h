@@ -55,6 +55,7 @@ public:
 	bool HasRelic(RelicId id) const;
 	void GrantRelic(RelicId id);
 	const std::vector<RelicId>& GetRelics() const;
+	int GetEffectiveManaCost(const Spell& spell) const;
 
 private:
 	Inventory inventory_;

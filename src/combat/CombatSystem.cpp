@@ -78,8 +78,6 @@ static void ApplyOnHitRelics(Entity& attacker, Entity& target, int dmgDealt, boo
 static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& action,
 	GameStats& stats, Enemy* enemyTarget, bool isPlayer, Bestiary* bestiary = nullptr) {
 
-	actor.SetDefending(false);
-
 	switch (action.type) {
 
 	case ActionType::Attack: {
@@ -285,11 +283,9 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 			break;
 		}
 		const Spell& spell = spells[action.spellIndex];
-		int manaCost = spell.manaCost;
-		// Arcane Battery: spells cost 1 less mana (min 1)
-		if (isPlayer && static_cast<Player&>(actor).HasRelic(RelicId::ArcaneBattery)) {
-			manaCost = std::max(1, manaCost - 1);
-		}
+		int manaCost = isPlayer
+			? static_cast<Player&>(actor).GetEffectiveManaCost(spell)
+			: spell.manaCost;
 		actor.UseMana(manaCost);
 
 		if (isPlayer) stats.RecordSpellCast(spell.name);
@@ -576,6 +572,7 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 				TurnAction action = player.DecideTurn();
 
 				if (action.type == ActionType::Inspect) {
+					player.SetDefending(false);
 					knowledge = InspectEnemy(player, enemy, knowledge);
 					bestiary.RecordEnemy(enemy, knowledge);
 					enemy.PrintStatus(knowledge);
@@ -587,6 +584,7 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 						i--;
 					}
 					else {
+						player.SetDefending(false);
 						int hp = player.GetHP();
 						int mana = player.GetMana();
 						player.GetInventory().UseItem(
@@ -596,7 +594,14 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 					}
 				}
 				else {
+					player.SetDefending(false);
 					ExecuteAction(player, enemy, action, gameStats, &enemy, true, &bestiary);
+
+					// Player actions can be lethal to the player too: a Bash can
+					// recoil, and attacking a matching stance can trigger a counter.
+					if (!player.IsAlive()) {
+						AttemptDeathSave(player, deathSaveUsed);
+					}
 				}
 			}
 		};
@@ -608,6 +613,7 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 					std::cout << "  [Enemy Action " << (i + 1) << "/" << enemyActions << "]\n";
 
 				TurnAction action = enemy.DecideTurn();
+				enemy.SetDefending(false);
 				ExecuteAction(enemy, player, action, gameStats, nullptr, false);
 
 				// Death-save QTE: if the player just died, give them one chance
@@ -620,17 +626,10 @@ bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
 		if (playerFirst) {
 			doPlayerActions();
 			if (enemy.IsAlive()) doEnemyActions();
-			player.SetDefending(false);
-			enemy.SetDefending(false);
 		}
 		else {
 			doEnemyActions();
-			bool playerWasDefending = player.IsDefending();
 			if (player.IsAlive()) doPlayerActions();
-			enemy.SetDefending(false);
-			if (playerWasDefending) {
-				player.SetDefending(false);
-			}
 		}
 
 		// End of round: wait for input then clear

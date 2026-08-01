@@ -147,6 +147,13 @@ bool Player::HasRelic(RelicId id) const {
 	return false;
 }
 
+int Player::GetEffectiveManaCost(const Spell& spell) const {
+	if (HasRelic(RelicId::ArcaneBattery)) {
+		return std::max(1, spell.manaCost - 1);
+	}
+	return spell.manaCost;
+}
+
 const std::vector<RelicId>& Player::GetRelics() const { return relics_; }
 
 void Player::RecalcDerivedWithRelics() {
@@ -319,9 +326,10 @@ TurnAction Player::DecideTurn() {
 		std::cout << "  Known spells:\n";
 		for (size_t i = 0; i < knownSpells_.size(); ++i) {
 			const auto& sp = knownSpells_[i];
+			int manaCost = GetEffectiveManaCost(sp);
 			std::cout << "    " << (i + 1) << ". " << sp.name
 				<< " [" << sp.GetElementName() << "] "
-				<< "(Cost: " << sp.manaCost << " Mana, Power: " << sp.power << ")\n";
+				<< "(Cost: " << manaCost << " Mana, Power: " << sp.power << ")\n";
 		}
 		std::cout << "    0. Cancel\n  > ";
 		int spellChoice = 0;
@@ -332,7 +340,7 @@ TurnAction Player::DecideTurn() {
 			break;
 		}
 		int idx = spellChoice - 1;
-		if (currentMana_ < knownSpells_[idx].manaCost) {
+		if (currentMana_ < GetEffectiveManaCost(knownSpells_[idx])) {
 			std::cout << "  Not enough mana! Attacking instead.\n";
 			action.type = ActionType::Attack;
 			break;

@@ -36,7 +36,12 @@ RoomContent Dungeon::GenerateRoomContent(bool isStart, bool isStaircase) {
 	int combatChance = static_cast<int>((40 + currentLevel_ * 2) * enemyScale);
 	int chestChance = static_cast<int>(15 * (1.0f / enemyScale)); // fewer chests if enemies scaled up
 	int trapChance = static_cast<int>((8 + currentLevel_) * trapMul);
-	int restChance = static_cast<int>((12 - currentLevel_) * (1.0f / trapMul));
+	int baseRestChance = 12 - currentLevel_;
+	// A zero multiplier explicitly disables traps. Preserve the one-sided limit
+	// of the existing inverse formula without converting infinity/NaN to int.
+	int restChance = trapMul > 0.0f
+		? static_cast<int>(baseRestChance * (1.0f / trapMul))
+		: (baseRestChance > 0 ? 100 : 2);
 	if (restChance < 2) restChance = 2;
 
 	if (roll <= combatChance) return RoomContent::Combat;
@@ -708,14 +713,6 @@ bool Dungeon::PromptMovement(Player& player) {
 					return true; // Not fatal, just futile
 				}
 			}
-			// prepare wall (create if missing)
-			if (!current.HasHiddenExit(dir)) {
-				EnsureWallExists(current, dir);
-			}
-			int wallHp = current.GetHiddenToughness(dir);
-			auto mat = current.hiddenMaterial[static_cast<int>(dir)];
-			auto weakness = current.hiddenWeakness[static_cast<int>(dir)];
-
 			Console::PrintSlow("\n  A solid barrier blocks the " + std::string(DirectionName(dir)) + ".");
 
 			// choose method
@@ -731,12 +728,22 @@ bool Dungeon::PromptMovement(Player& player) {
 				std::cout << "  Invalid. Enter 0-2: ";
 				std::cin >> sub;
 			}
-			if (sub == 0) return false;
+			// Cancelling a wall attack is a normal menu action
+			if (sub == 0) return true;
 
 			int ax = playerX_, ay = playerY_;
 			switch (dir) { case Direction::North: ay--; break; case Direction::South: ay++; break; case Direction::East: ax++; break; case Direction::West: ax--; break; }
+			auto SetWallToughness = [&](int toughness) {
+				current.hiddenToughness[static_cast<int>(dir)] = toughness;
+				if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
+					grid_[ay][ax].hiddenToughness[static_cast<int>(OppositeDirection(dir))] = toughness;
+				}
+			};
 
 			if (sub == 1) {
+				EnsureWallExists(current, dir);
+				int wallHp = current.GetHiddenToughness(dir);
+				auto mat = current.hiddenMaterial[static_cast<int>(dir)];
 				int rawRoll = rng.NextInt(1, 20);
 				int phys = player.GetATK() + rng.NextInt(1, 4) + (rawRoll == 20 ? 4 : 0);
 				Console::PrintSlow("\n  You strike the barrier with all your might...");
@@ -762,7 +769,7 @@ bool Dungeon::PromptMovement(Player& player) {
 				}
 				else {
 					int lost = std::max(1, effective / 2);
-					current.hiddenToughness[static_cast<int>(dir)] = std::max(1, wallHp - lost);
+					SetWallToughness(std::max(1, wallHp - lost));
 					Console::PrintSlow("  The blow chips at the barrier, but it holds.");
 					if (rawRoll == 1 || rng.Chance(0.18f)) {
 						int dmg = rng.NextInt(1, 3) + (currentLevel_ / 2);
@@ -789,8 +796,9 @@ bool Dungeon::PromptMovement(Player& player) {
 			}
 			std::cout << "\n  Choose a spell to target the barrier:\n";
 			for (size_t i = 0; i < spells.size(); ++i) {
+				int manaCost = player.GetEffectiveManaCost(spells[i]);
 				std::cout << "    " << (i + 1) << ". " << spells[i].name
-					<< " (" << spells[i].GetElementName() << ", Cost: " << spells[i].manaCost << ")\n";
+					<< " (" << spells[i].GetElementName() << ", Cost: " << manaCost << ")\n";
 			}
 			std::cout << "    0. Cancel\n  > ";
 			int sChoice = -1;
@@ -800,11 +808,16 @@ bool Dungeon::PromptMovement(Player& player) {
 				return true;
 			}
 			const Spell& sp = spells[sChoice - 1];
-			if (player.GetMana() < sp.manaCost) {
+			int manaCost = player.GetEffectiveManaCost(sp);
+			if (player.GetMana() < manaCost) {
 				Console::PrintSlow("  Not enough mana to cast that.");
 				return true;
 			}
-			player.UseMana(sp.manaCost);
+			EnsureWallExists(current, dir);
+			int wallHp = current.GetHiddenToughness(dir);
+			auto mat = current.hiddenMaterial[static_cast<int>(dir)];
+			auto weakness = current.hiddenWeakness[static_cast<int>(dir)];
+			player.UseMana(manaCost);
 			int spellDamage = sp.power + player.GetIntelligence() + player.ConsumeAttackBuff(true);
 
 			// If element matches weakness, amplify; Strange + correct element = insta-break
@@ -840,7 +853,7 @@ bool Dungeon::PromptMovement(Player& player) {
 			}
 			else {
 				int lost = std::max(1, spellDamage);
-				current.hiddenToughness[static_cast<int>(dir)] = std::max(1, wallHp - lost);
+				SetWallToughness(std::max(1, wallHp - lost));
 				Console::PrintSlow("  The spell scorches the surface but the barrier still stands.");
 				return true;
 			}
