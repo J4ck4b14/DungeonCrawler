@@ -28,7 +28,8 @@ public:
 	Enemy(const std::string& name, const Stats& stats, const std::vector<Spell>& spells = {},
 		int xpReward = 0, SpellElement weakness = SpellElement::Arcane);
 
-	TurnAction DecideTurn() override;
+	// Select an action without producing UI output.
+	TurnAction DecideTurn();
 
 	// Print status based on how much the player knows
 	void PrintStatus() const;

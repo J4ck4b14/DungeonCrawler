@@ -1,7 +1,9 @@
 # Build artifacts
 /build/
+/build-*/
 /build-wasm/
 /out/
+**/out/
 /bin/
 /Debug/
 /Release/
@@ -28,6 +30,7 @@ Makefile
 # Visual Studio generated
 .vscode/
 .vs/
+**/.vs/
 *.sln
 *.vcxproj
 *.vcxproj.filters

@@ -1,6 +1,6 @@
 // Entity.h
 // --------
-// Abstract base class for all entities (player and enemies).
+// Base class for all entities (player and enemies).
 // Provides shared combat state: HP, mana, ATK, speed, intelligence,
 // defending status, defense stance, attack buffs, and known spells.
 //
@@ -11,10 +11,8 @@
 //   Thrust -> 0.8x ATK normally, 1.0x if target defends (ignores defense)
 //   Bash   -> 1.3x ATK, 15% chance to whiff + self-damage
 //
-// DefenseStance: When defending, choose what to guard against:
-//   AntiSlash/AntiThrust/AntiBash -> Parry if attacker matches: 0 damage + 1.3x ATK counter
-//   AntiMagic -> Parry if attacker casts a spell: 0 damage + 0.9x ATK counter
-//   Wrong guess -> just halves damage, no counter
+// Players use reactive defense timing. DefenseStance remains shared state for
+// enemy guards, whose stance can still affect the player's attack choice.
 //
 // AttackBuff: Temporary bonus damage on next N physical or magical attacks,
 //   granted by Sharpen (physical) or Study (magical) at rest areas.
@@ -24,30 +22,7 @@
 #include <vector>
 #include "core/Stats.h"
 #include "combat/Spell.h"
-
-enum class ActionType {
-	Attack,
-	Defend,
-	CastSpell,
-	UseItem,
-	Inspect,
-	None
-};
-
-// Physical attack styles
-enum class AttackStyle {
-	Slash,     // Balanced: 1.0x ATK, 15% crit
-	Thrust,    // Precise:  0.8x/1.0x ATK, ignores defense
-	Bash       // Heavy:    1.3x ATK, 15% whiff chance
-};
-
-// Directional defense -- pick what you're bracing for
-enum class DefenseStance {
-	AntiSlash,
-	AntiThrust,
-	AntiBash,
-	AntiMagic
-};
+#include "combat/CombatTypes.h"
 
 // Temporary attack bonus from rest area sharpening/studying
 struct AttackBuff {
@@ -56,20 +31,15 @@ struct AttackBuff {
 	bool isMagical = false; // true = spell buff, false = physical buff
 };
 
-struct TurnAction {
-	ActionType type = ActionType::None;
-	int spellIndex = -1;
-	int itemIndex = -1;
-	AttackStyle attackStyle = AttackStyle::Slash;
-	DefenseStance defenseStance = DefenseStance::AntiSlash;
+struct PowerBuff {
+	int percentBonus = 0;
+	int remainingHits = 0;
 };
 
 class Entity {
 public:
 	Entity(const std::string& name, const Stats& stats);
 	virtual ~Entity() = default;
-
-	virtual TurnAction DecideTurn() = 0;
 
 	// Getters
 	const std::string& GetName() const;
@@ -101,6 +71,10 @@ public:
 	// Attack buff system (from rest area sharpen/study)
 	void ApplyAttackBuff(int bonus, int hits, bool magical);
 	int ConsumeAttackBuff(bool magical); // Returns bonus and decrements remaining hits
+	const AttackBuff& GetAttackBuff() const;
+	void ApplyPowerBuff(int percentBonus, int hits);
+	int ConsumePowerBuff(int damage);
+	const PowerBuff& GetPowerBuff() const;
 
 protected:
 	std::string name_;
@@ -111,4 +85,5 @@ protected:
 	DefenseStance defenseStance_ = DefenseStance::AntiSlash;
 	std::vector<Spell> knownSpells_;
 	AttackBuff attackBuff_;
+	PowerBuff powerBuff_;
 };

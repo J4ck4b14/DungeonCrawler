@@ -3,8 +3,6 @@
 // The player entity. Extends Entity with:
 //   - Inventory for consumable items
 //   - XP / leveling system (3 stat points per level)
-//   - Interactive DecideTurn() with attack style submenu,
-//     directional defense stance, spell selection, item use, enemy inspection
 //   - Character creation via AllocateStats() (distributes 5 starting points)
 //   - Training counter for rest area stat boosts (capped at 3 total)
 
@@ -16,8 +14,6 @@
 class Player : public Entity {
 public:
 	Player(const std::string& name, const Stats& stats);
-
-	TurnAction DecideTurn() override;
 
 	Inventory& GetInventory();
 	const Inventory& GetInventory() const;

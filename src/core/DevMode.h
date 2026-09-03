@@ -7,6 +7,7 @@
 
 namespace DevMode {
 	void Enable();
+	void Disable();
 	bool IsEnabled();
 
 	// Enemy stat / XP scaling (1.0 = normal)

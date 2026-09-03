@@ -8,7 +8,6 @@
             "binaryDir": "${sourceDir}/out/build/${presetName}",
             "installDir": "${sourceDir}/out/install/${presetName}",
             "cacheVariables": {
-                "CMAKE_C_COMPILER": "cl.exe",
                 "CMAKE_CXX_COMPILER": "cl.exe"
             },
             "condition": {
@@ -35,6 +34,15 @@
             "inherits": "x64-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "x64-asan",
+            "displayName": "x64 Address Sanitizer",
+            "inherits": "x64-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "DUNGEON_ENABLE_SANITIZERS": "ON"
             }
         },
         {
@@ -96,6 +104,58 @@
                     "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
                 }
             }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "x64-debug",
+            "configurePreset": "x64-debug"
+        },
+        {
+            "name": "x64-release",
+            "configurePreset": "x64-release"
+        },
+        {
+            "name": "x64-asan",
+            "configurePreset": "x64-asan"
+        },
+        {
+            "name": "x86-debug",
+            "configurePreset": "x86-debug"
+        },
+        {
+            "name": "x86-release",
+            "configurePreset": "x86-release"
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug"
+        },
+        {
+            "name": "macos-debug",
+            "configurePreset": "macos-debug"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "x64-debug",
+            "configurePreset": "x64-debug",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "x64-asan",
+            "configurePreset": "x64-asan",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "macos-debug",
+            "configurePreset": "macos-debug",
+            "output": { "outputOnFailure": true }
         }
     ]
 }
