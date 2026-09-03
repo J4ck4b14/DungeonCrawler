@@ -1,24 +1,34 @@
 #pragma once
 #include "Room.h"
-#include "Encounter.h"
 #include "entities/Player.h"
 #include "core/GameStats.h"
 #include "core/Bestiary.h"
 #include <vector>
 #include <set>
 
+enum class FloorResult {
+	Cleared,
+	PlayerDied
+};
+
+class PlayerProfile;
+
 class Dungeon {
 public:
-	Dungeon();
+	explicit Dungeon(const PlayerProfile* profile = nullptr);
 
-	// Run a full dungeon floor. Returns true if player survives and finds the exit.
-	bool RunFloor(Player& player);
+	FloorResult RunFloor(Player& player);
 
 	int GetCurrentLevel() const;
 	const GameStats& GetStats() const;
 	const Bestiary& GetBestiary() const;
 
 private:
+	enum class MovementResult {
+		ReachedStairs,
+		PlayerDied
+	};
+
 	int currentLevel_;
 
 	// Grid for current floor
@@ -32,6 +42,7 @@ private:
 	// Persistent stats across the whole run
 	GameStats gameStats_;
 	Bestiary bestiary_;
+	const PlayerProfile* profile_ = nullptr;
 
 	// Floor generation
 	void GenerateFloor();
@@ -40,13 +51,13 @@ private:
 	// Room handling
 	void EnterRoom(Player& player);
 	void HandleRoomContent(Player& player, Room& room);
-	void HandleCombat(Player& player);
+	bool HandleCombat(Player& player);
 	void HandleChest(Player& player);
 	void HandleRest(Player& player);
-	void HandleTrap(Player& player, Room& room);
+	RoomOutcome HandleTrap(Player& player, Room& room);
 
 	// Movement
-	bool PromptMovement(Player& player); // Returns false if player found stairs & descends
+	MovementResult PromptMovement(Player& player);
 
 	// Map display
 	void PrintMap() const;

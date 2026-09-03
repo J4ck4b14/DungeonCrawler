@@ -2,9 +2,9 @@
 // -----------------
 // Resolves turn-based combat between the player and an enemy.
 //
-// Combat flow: Player acts -> Enemy acts -> repeat.
-// Defense is a PREDICTION — you choose your stance before the enemy moves,
-// guessing what attack they'll use. If you guess right: PARRY (0 damage + counter).
+// Combat flow: actors resolve in initiative order each round.
+// Player defense is reactive: commit to Defend, then catch falling key cues.
+// A completed sequence blocks; an all-perfect sequence parries and counters.
 //
 //
 // Attack style balance:
@@ -12,14 +12,18 @@
 //   Thrust: 0.8x normally, 1.0x vs defenders. Ignores defense.
 //   Bash:   1.3x ATK, 15% whiff + self-damage. High risk/reward.
 //
-// Directional Defense:
-//   CORRECT GUESS (physical): PARRY! 0 damage, counter = 1.3x ATK.
-//   CORRECT GUESS (magic):    PARRY! 0 damage, counter = 0.9x ATK.
-//   WRONG GUESS:              Halves damage, no counter.
+// Reactive Defense:
+//   ALL PERFECT: 0 damage and an automatic counter.
+//   ALL CAUGHT:  Half damage.
+//   ANY MISS:    Full damage.
+// Enemy guards retain hidden directional stances.
 //
-// Enemy stance and attack style are NEVER revealed to the player directly.
+// Enemy intent is committed at round start. Better knowledge and Intelligence
+// turn a vague warning into a precise read of the selected action.
 
 #include "CombatSystem.h"
+#include "CombatRules.h"
+#include "DefenseRules.h"
 #include "entities/Player.h"
 #include "entities/Enemy.h"
 #include "core/GameStats.h"
@@ -27,6 +31,9 @@
 #include "utils/RNG.h"
 #include "utils/Console.h"
 #include "core/Relic.h"
+#include "presentation/CombatDisplay.h"
+#include "presentation/CombatMenu.h"
+#include "presentation/DefenseQTE.h"
 #include <iostream>
 #include <algorithm>
 #include <set>
@@ -38,15 +45,7 @@ static std::string PickRandom(const std::vector<std::string>& lines) {
 	return lines[rng.NextInt(0, static_cast<int>(lines.size()) - 1)];
 }
 
-// ---- Parry check ----
-
-static bool IsPhysicalParry(DefenseStance stance, AttackStyle style) {
-	return (stance == DefenseStance::AntiSlash  && style == AttackStyle::Slash)
-		|| (stance == DefenseStance::AntiThrust && style == AttackStyle::Thrust)
-		|| (stance == DefenseStance::AntiBash   && style == AttackStyle::Bash);
-}
-
-// ---- On-hit relic effects (physical damage only) ----
+// ---- On-hit relic effects ----
 // attacker dealt `dmgDealt` to target. Handles:
 //   Vampiric Fang    (player attacking): heal 20% of damage dealt
 //   Thorned Carapace (player defending): attacker takes 3 damage
@@ -72,11 +71,107 @@ static void ApplyOnHitRelics(Entity& attacker, Entity& target, int dmgDealt, boo
 	}
 }
 
+struct CombatRuntime {
+	bool aegisCoilUsedThisRound = false;
+	bool defenseQteOccurred = false;
+};
+
+static std::vector<char> GenerateDefenseKeys(int count) {
+	static RNG rng;
+	static constexpr char keys[] = {'W', 'A', 'S', 'D'};
+	std::vector<char> result;
+	result.reserve(static_cast<size_t>(std::max(0, count)));
+	for (int i = 0; i < count; ++i) {
+		result.push_back(keys[rng.NextInt(0, 3)]);
+	}
+	return result;
+}
+
+static bool ResolveReactiveDefense(Entity& attacker, Entity& target,
+	const TurnAction& action, const Spell* spell, int damage,
+	GameStats& stats, CombatRuntime* runtime) {
+	if (!target.IsDefending()) return false;
+	Player* player = dynamic_cast<Player*>(&target);
+	if (!player) return false;
+
+	const int cueCount = DefenseRules::CueCount(action, spell);
+	const DefenseChallenge challenge = DefenseRules::BuildChallenge(
+		action, spell, attacker.GetSpeed(), attacker.GetATK(), GenerateDefenseKeys(cueCount));
+	const DefenseResult result = DefenseQTE::Run(challenge);
+	if (runtime) runtime->defenseQteOccurred = true;
+
+	if (result == DefenseResult::PerfectParry) {
+		Console::PrintSlow("  ** PERFECT PARRY! No damage received. **");
+		const int counter = action.type == ActionType::CastSpell
+			? CombatRules::MagicCounterDamage(player->GetATK())
+			: CombatRules::PhysicalCounterDamage(player->GetATK());
+		attacker.ReceiveDamage(counter);
+		stats.totalDamageDealt += counter;
+		Console::PrintSlow("  " + player->GetName() + " counters "
+			+ attacker.GetName() + " for " + std::to_string(counter) + " damage!");
+		if (player->HasRelic(RelicId::RiposteSeal)) {
+			player->ApplyPowerBuff(20, 1);
+			Console::PrintSlow("  (Riposte Seal: your next damaging action is empowered.)");
+		}
+		return true;
+	}
+
+	const int hpBefore = player->GetHP();
+	if (result == DefenseResult::Block) {
+		const bool wasDefending = player->IsDefending();
+		player->SetDefending(false);
+		player->ReceiveDamage(DefenseRules::DamageAfterDefense(damage, result));
+		player->SetDefending(wasDefending);
+		const int damageTaken = hpBefore - player->GetHP();
+		stats.totalDamageTaken += damageTaken;
+		Console::PrintSlow("  ** BLOCK! Damage reduced to "
+			+ std::to_string(damageTaken) + ". **");
+		ApplyOnHitRelics(attacker, *player, damageTaken, false);
+		if (runtime && !runtime->aegisCoilUsedThisRound
+			&& player->HasRelic(RelicId::AegisCoil)) {
+			runtime->aegisCoilUsedThisRound = true;
+			const int manaBefore = player->GetMana();
+			player->RestoreMana(1);
+			if (player->GetMana() > manaBefore) {
+				Console::PrintSlow("  (Aegis Coil resonates: +1 Mana.)");
+			}
+		}
+		return true;
+	}
+
+	const bool wasDefending = player->IsDefending();
+	player->SetDefending(false);
+	player->ReceiveDamage(DefenseRules::DamageAfterDefense(damage, result));
+	player->SetDefending(wasDefending);
+	const int damageTaken = hpBefore - player->GetHP();
+	stats.totalDamageTaken += damageTaken;
+	Console::PrintSlow("  ** GUARD BREAK! Full damage: "
+		+ std::to_string(damageTaken) + ". **");
+	ApplyOnHitRelics(attacker, *player, damageTaken, false);
+	return true;
+}
+
+static void RecordEnemyDefeat(Player& player, const Enemy& enemy,
+	GameStats& stats, Bestiary& bestiary) {
+	++stats.totalKills;
+	bestiary.RecordKill(enemy.GetName());
+	if (player.HasRelic(RelicId::BloodLedger)) {
+		const int hpBefore = player.GetHP();
+		player.Heal(3);
+		const int restored = player.GetHP() - hpBefore;
+		if (restored > 0) {
+			Console::PrintSlow("  (Blood Ledger closes a name: +"
+				+ std::to_string(restored) + " HP.)");
+		}
+	}
+}
+
 // ---- Execute a single action ----
 // Now takes a Bestiary* so we can record weakness discoveries in combat
 
 static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& action,
-	GameStats& stats, Enemy* enemyTarget, bool isPlayer, Bestiary* bestiary = nullptr) {
+	GameStats& stats, Enemy* enemyTarget, bool isPlayer, Bestiary* bestiary = nullptr,
+	CombatRuntime* runtime = nullptr) {
 
 	switch (action.type) {
 
@@ -91,12 +186,12 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 		switch (action.attackStyle) {
 		case AttackStyle::Slash: {
 			dmg = baseAtk;
-			float critChance = 0.15f;
+			float critChance = CombatRules::SlashCritChance;
 			// Lucky Coin: doubled crit chance for the player
 			if (isPlayer && static_cast<Player&>(actor).HasRelic(RelicId::LuckyCoin))
-				critChance = 0.30f;
+				critChance = CombatRules::LuckyCoinCritChance;
 			if (rng.Chance(critChance)) {
-				dmg = static_cast<int>(baseAtk * 1.5f);
+				dmg = static_cast<int>(baseAtk * CombatRules::SlashCritMultiplier);
 				crit = true;
 			}
 			break;
@@ -104,21 +199,21 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 		case AttackStyle::Thrust:
 			dmg = target.IsDefending()
 				? baseAtk                              // Full damage vs defenders
-				: static_cast<int>(baseAtk * 0.8f);   // Reduced otherwise
+				: static_cast<int>(baseAtk * CombatRules::ThrustDamageMultiplier);
 			if (dmg < 1) dmg = 1;
 			break;
 		case AttackStyle::Bash:
-			if (rng.Chance(0.15f)) {
+			if (rng.Chance(CombatRules::BashMissChance)) {
 				missed = true;
 			} else {
-				dmg = static_cast<int>(baseAtk * 1.3f);
+				dmg = static_cast<int>(baseAtk * CombatRules::BashDamageMultiplier);
 			}
 			break;
 		}
 
 		// -- Apply sharpening buff --
-		int buffBonus = actor.ConsumeAttackBuff(false);
-		if (!missed && buffBonus > 0) {
+		int buffBonus = missed ? 0 : actor.ConsumeAttackBuff(false);
+		if (buffBonus > 0) {
 			dmg += buffBonus;
 			Console::PrintSlow("  (Sharpened weapon: +" + std::to_string(buffBonus) + " bonus!)");
 		}
@@ -129,13 +224,13 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 		if (isPlayer && !missed && enemyTarget
 			&& static_cast<Player&>(actor).HasRelic(RelicId::ExecutionersEdge)
 			&& enemyTarget->GetHP() * 10 < enemyTarget->GetMaxHP() * 3) {
-			dmg = static_cast<int>(dmg * 1.5f);
+			dmg = static_cast<int>(dmg * CombatRules::ExecutionerMultiplier);
 			Console::PrintSlow("  (Executioner's Edge: the wounded foe is exposed!)");
 		}
 
 		// -- Bash whiff --
 		if (missed) {
-			int selfDmg = std::max(1, static_cast<int>(baseAtk * 0.3f));
+			int selfDmg = std::max(1, static_cast<int>(baseAtk * CombatRules::BashRecoilMultiplier));
 			Console::PrintSlow("  " + PickRandom({
 				actor.GetName() + " swings wildly and loses balance!",
 				actor.GetName() + " overcommits and stumbles!",
@@ -151,6 +246,13 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 			if (isPlayer) stats.totalDamageTaken += selfDmg;
 			if (!isPlayer) stats.totalDamageDealt += selfDmg;
 			break;
+		}
+
+		const int unempoweredDamage = dmg;
+		dmg = actor.ConsumePowerBuff(dmg);
+		if (dmg > unempoweredDamage) {
+			Console::PrintSlow("  (Empower surges: "
+				+ std::to_string(dmg - unempoweredDamage) + " bonus damage!)");
 		}
 
 		// -- Hit message (varied per style) --
@@ -196,9 +298,13 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 		// Thrust's edge: against a WRONG stance it pierces (full damage,
 		// no halving), where Slash/Bash get halved.
 		bool ignoreDefense = (action.attackStyle == AttackStyle::Thrust);
+		if (!isPlayer && ResolveReactiveDefense(actor, target, action, nullptr,
+			dmg, stats, runtime)) {
+			break;
+		}
 
 		if (target.IsDefending()) {
-			if (IsPhysicalParry(target.GetDefenseStance(), action.attackStyle)) {
+			if (CombatRules::IsPhysicalParry(target.GetDefenseStance(), action.attackStyle)) {
 				// PARRY! Zero damage, full counter
 				Console::PrintSlow("  " + PickRandom({
 					"** PARRY! " + target.GetName() + " read the attack perfectly! **",
@@ -206,7 +312,7 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 					"** PERFECT BLOCK! " + target.GetName() + " turns the attack aside! **",
 					"** PARRY! " + target.GetName() + " catches the blow and turns it! **",
 				}));
-				int counter = static_cast<int>(target.GetATK() * 1.3f);
+				int counter = CombatRules::PhysicalCounterDamage(target.GetATK());
 				Console::PrintSlow("  " + PickRandom({
 					target.GetName() + " strikes back for " + std::to_string(counter) + " damage!",
 					target.GetName() + " retaliates with a devastating " + std::to_string(counter) + " damage counter!",
@@ -250,20 +356,12 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 
 	case ActionType::Defend: {
 		actor.SetDefending(true);
-		actor.SetDefenseStance(action.defenseStance);
 		if (isPlayer) {
-			// Player sees their own stance
-			std::string stanceName;
-			switch (action.defenseStance) {
-			case DefenseStance::AntiSlash:  stanceName = "slashes"; break;
-			case DefenseStance::AntiThrust: stanceName = "thrusts"; break;
-			case DefenseStance::AntiBash:   stanceName = "heavy blows"; break;
-			case DefenseStance::AntiMagic:  stanceName = "magic"; break;
-			}
 			Console::PrintSlow("  " + actor.GetName()
-				+ " takes a defensive stance against " + stanceName + "!");
+				+ " enters a reactive guard. Watch the timing line!");
 		}
 		else {
+			actor.SetDefenseStance(action.defenseStance);
 			// Enemy stance is hidden
 			Console::PrintSlow("  " + PickRandom({
 				actor.GetName() + " settles into a guarded position.",
@@ -290,7 +388,7 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 
 		if (isPlayer) stats.RecordSpellCast(spell.name);
 
-		if (spell.target == SpellTarget::Enemy) {
+		if (spell.effect == SpellEffect::Damage) {
 			int dmg = spell.power + actor.GetIntelligence() * 2;
 
 			// Apply arcane study buff
@@ -299,12 +397,18 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 				dmg += buffBonus;
 				Console::PrintSlow("  (Arcane focus: +" + std::to_string(buffBonus) + " bonus!)");
 			}
+			const int unempoweredDamage = dmg;
+			dmg = actor.ConsumePowerBuff(dmg);
+			if (dmg > unempoweredDamage) {
+				Console::PrintSlow("  (Empower surges: "
+					+ std::to_string(dmg - unempoweredDamage) + " bonus damage!)");
+			}
 
 			// Weakness bonus
 			bool hitWeakness = false;
 			if (enemyTarget && spell.element == enemyTarget->GetWeakness()) {
 				hitWeakness = true;
-				dmg = static_cast<int>(dmg * 1.5f);
+				dmg = static_cast<int>(dmg * CombatRules::WeaknessMultiplier);
 				Console::PrintSlow("  " + actor.GetName() + " casts " + spell.name
 					+ " [" + spell.GetElementName() + "] for " + std::to_string(dmg)
 					+ " damage! It's super effective!");
@@ -323,7 +427,13 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 					+ " [" + spell.GetElementName() + "] for " + std::to_string(dmg) + " damage!");
 			}
 
-			// Check for magic parry
+			if (!isPlayer && ResolveReactiveDefense(actor, target, action, &spell,
+				dmg, stats, runtime)) {
+				break;
+			}
+
+			bool spellDealtDamage = false;
+			// Enemy guards retain their hidden elemental stance behavior.
 			if (target.IsDefending() && target.GetDefenseStance() == DefenseStance::AntiMagic) {
 				Console::PrintSlow("  " + PickRandom({
 					"** MAGIC PARRY! " + target.GetName() + " deflects the spell! **",
@@ -331,7 +441,7 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 					"** PARRY! " + target.GetName() + "'s ward absorbs the spell! **",
 					"** MAGIC PARRY! The spell shatters against " + target.GetName() + "'s focus! **",
 				}));
-				int counter = std::max(1, static_cast<int>(target.GetATK() * 0.9f));
+				int counter = CombatRules::MagicCounterDamage(target.GetATK());
 				Console::PrintSlow("  " + PickRandom({
 					target.GetName() + " retaliates for " + std::to_string(counter) + " damage!",
 					target.GetName() + " channels the deflected energy back for " + std::to_string(counter) + " damage!",
@@ -345,23 +455,43 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 			else if (target.IsDefending()) {
 				// Wrong stance vs magic: halved
 				target.ReceiveDamage(dmg); // ReceiveDamage halves internally
+				spellDealtDamage = dmg / 2 > 0;
 				Console::PrintSlow("  (Halved by defense!)");
 				if (isPlayer) stats.totalDamageDealt += dmg / 2;
 				if (!isPlayer) stats.totalDamageTaken += dmg / 2;
+				if (!isPlayer) ApplyOnHitRelics(actor, target, dmg / 2, false);
 			}
 			else {
 				target.ReceiveDamage(dmg);
+				spellDealtDamage = dmg > 0;
 				if (isPlayer) stats.totalDamageDealt += dmg;
 				if (!isPlayer) stats.totalDamageTaken += dmg;
+				if (!isPlayer) ApplyOnHitRelics(actor, target, dmg, false);
+			}
+			if (isPlayer && hitWeakness && spellDealtDamage
+				&& static_cast<Player&>(actor).HasRelic(RelicId::ManaPrism)) {
+				Player& player = static_cast<Player&>(actor);
+				const int manaBefore = player.GetMana();
+				player.RestoreMana(1);
+				if (player.GetMana() > manaBefore) {
+					Console::PrintSlow("  (Mana Prism refracts the weakness: +1 Mana.)");
+				}
 			}
 		}
-		else {
+		else if (spell.effect == SpellEffect::Heal) {
 			// Healing spell
 			int heal = spell.power + actor.GetIntelligence();
 			actor.Heal(heal);
 			if (isPlayer) stats.totalHealing += heal;
 			Console::PrintSlow("  " + actor.GetName() + " casts " + spell.name
 				+ " and restores " + std::to_string(heal) + " HP!");
+		}
+		else if (spell.effect == SpellEffect::Empower) {
+			actor.ApplyPowerBuff(spell.power, spell.duration);
+			Console::PrintSlow("  " + actor.GetName() + " casts " + spell.name
+				+ " and becomes empowered: +" + std::to_string(spell.power)
+				+ "% damage for the next " + std::to_string(spell.duration)
+				+ " damaging actions!");
 		}
 		break;
 	}
@@ -473,9 +603,14 @@ static bool AttemptDeathSave(Player& player, bool& deathSaveUsed) {
 	bool survived = Console::HeartbeatQTE(sequence, beatMs, windowMs);
 
 	if (survived) {
-		int reviveHp = std::max(1, player.GetMaxHP() / 15);
+		int reviveHp = player.HasRelic(RelicId::LastEmber)
+			? std::max(1, player.GetMaxHP() / 5)
+			: std::max(1, player.GetMaxHP() / 15);
 		player.Heal(reviveHp);
 		player.IncrementDeathSave();
+		if (player.HasRelic(RelicId::LastEmber)) {
+			Console::PrintSlow("  (Last Ember flares and pulls you farther from death.)");
+		}
 
 		Console::PrintSlow("", 300);
 		Console::PrintSlow("  " + PickRandom({
@@ -507,168 +642,260 @@ static bool AttemptDeathSave(Player& player, bool& deathSaveUsed) {
 
 // ---- Main combat loop ----
 
-bool CombatSystem::ResolveCombat(Player& player, Enemy& enemy,
+static int CountLivingEnemies(const std::vector<Enemy>& enemies) {
+	return static_cast<int>(std::count_if(enemies.begin(), enemies.end(),
+		[](const Enemy& enemy) { return enemy.IsAlive(); }));
+}
+
+static int FirstLivingEnemy(const std::vector<Enemy>& enemies) {
+	for (size_t i = 0; i < enemies.size(); ++i) {
+		if (enemies[i].IsAlive()) return static_cast<int>(i);
+	}
+	return -1;
+}
+
+static bool ActionNeedsEnemyTarget(const Player& player, const TurnAction& action) {
+	if (action.type == ActionType::Attack || action.type == ActionType::Inspect) return true;
+	if (action.type != ActionType::CastSpell) return false;
+	const auto& spells = player.GetKnownSpells();
+	return action.spellIndex >= 0
+		&& action.spellIndex < static_cast<int>(spells.size())
+		&& spells[action.spellIndex].effect == SpellEffect::Damage;
+}
+
+static std::vector<int> BuildInitiativeOrder(const Player& player,
+	const std::vector<Enemy>& enemies) {
+	std::vector<int> order = {-1};
+	for (size_t i = 0; i < enemies.size(); ++i) {
+		if (enemies[i].IsAlive()) order.push_back(static_cast<int>(i));
+	}
+	std::stable_sort(order.begin(), order.end(), [&](int left, int right) {
+		const int leftSpeed = left < 0 ? player.GetSpeed() : enemies[left].GetSpeed();
+		const int rightSpeed = right < 0 ? player.GetSpeed() : enemies[right].GetSpeed();
+		if (leftSpeed != rightSpeed) return leftSpeed > rightSpeed;
+		if (left < 0 || right < 0) return left < 0;
+		return left < right;
+	});
+	return order;
+}
+
+static void AnnounceEnemyDefeat(const std::vector<Enemy>& enemies, int enemyIndex) {
+	const int remaining = CountLivingEnemies(enemies);
+	Console::PrintSlow("  ** [E" + std::to_string(enemyIndex + 1) + "] "
+		+ enemies[enemyIndex].GetName() + " is defeated! **");
+	if (remaining > 0) {
+		Console::PrintSlow("  " + std::to_string(remaining)
+			+ (remaining == 1 ? " enemy remains." : " enemies remain."));
+	}
+}
+
+bool CombatSystem::ResolveCombat(Player& player, std::vector<Enemy>& enemies,
 	std::set<std::string>& seenEnemyTypes, GameStats& gameStats,
 	Bestiary& bestiary) {
+	if (enemies.empty()) return true;
 
 	Console::Clear();
+	CombatDisplay::PrintEncounterIntro(enemies);
 
-	// Initial knowledge from bestiary or floor sightings
-	EnemyKnowledge knowledge = bestiary.GetKnowledge(enemy.GetName());
-	if (knowledge == EnemyKnowledge::None && seenEnemyTypes.count(enemy.GetName())) {
-		knowledge = EnemyKnowledge::Approximate;
-	}
-
-	Console::PrintSlow("\n==================================");
-	Console::PrintSlow("  A " + enemy.GetName() + " appears!");
-	Console::PrintSlow("==================================");
-
-	enemy.PrintStatus(knowledge);
-
-	// Show known weakness from bestiary if discovered (but not yet Full knowledge)
-	if (knowledge != EnemyKnowledge::Full && bestiary.IsWeaknessKnown(enemy.GetName())) {
-		Spell tmp;
-		tmp.element = enemy.GetWeakness();
-		std::cout << "  (Known weakness: " << tmp.GetElementName() << ")\n";
-	}
-
-	std::cout << "\n";
-
-	// Bestiary discovery (capture player INT at discovery time)
-	bool newDiscovery = bestiary.RecordEnemy(enemy, knowledge, player.GetIntelligence());
-	if (newDiscovery) {
-		Console::PrintSlow("  ** New bestiary entry: " + enemy.GetName() + "! **");
-		player.GainXP(3);
+	std::vector<EnemyKnowledge> knowledge(enemies.size(), EnemyKnowledge::None);
+	for (size_t i = 0; i < enemies.size(); ++i) {
+		Enemy& enemy = enemies[i];
+		knowledge[i] = bestiary.GetKnowledge(enemy.GetName());
+		if (knowledge[i] == EnemyKnowledge::None
+			&& seenEnemyTypes.count(enemy.GetName())) {
+			knowledge[i] = EnemyKnowledge::Approximate;
+		}
+		if (bestiary.RecordEnemy(enemy, knowledge[i], player.GetIntelligence())) {
+			Console::PrintSlow("  ** New bestiary entry: " + enemy.GetName() + "! **");
+			player.GainXP(3);
+		}
 	}
 
 	// Turn loop
 	bool deathSaveUsed = false;
+	bool huntersLensAvailable = player.HasRelic(RelicId::HuntersLens);
+	int roundNumber = 1;
 
-	while (player.IsAlive() && enemy.IsAlive()) {
-		int playerSpeed = player.GetSpeed();
-		int enemySpeed = enemy.GetSpeed();
-		int playerActions = player.ActionsPerRound(enemySpeed);
-		int enemyActions = enemy.ActionsPerRound(playerSpeed);
+	while (player.IsAlive() && CountLivingEnemies(enemies) > 0) {
+		const std::vector<int> initiativeOrder = BuildInitiativeOrder(player, enemies);
+		int fastestEnemySpeed = 1;
+		std::vector<int> enemyActions(enemies.size(), 0);
+		std::vector<TurnAction> plannedActions(enemies.size());
+		std::vector<bool> plannedIntentPending(enemies.size(), false);
+		std::vector<bool> weaknessKnown(enemies.size(), false);
 
-		std::cout << "\n-- Round Start --\n";
-		player.PrintStatus();
-		enemy.PrintStatus(knowledge);
-
-		// Show known weakness inline if discovered
-		if (knowledge != EnemyKnowledge::Full && bestiary.IsWeaknessKnown(enemy.GetName())) {
-			Spell tmp;
-			tmp.element = enemy.GetWeakness();
-			std::cout << "  (Known weakness: " << tmp.GetElementName() << ")\n";
+		for (size_t i = 0; i < enemies.size(); ++i) {
+			if (!enemies[i].IsAlive()) continue;
+			fastestEnemySpeed = std::max(fastestEnemySpeed, enemies[i].GetSpeed());
+			enemyActions[i] = enemies[i].ActionsPerRound(player.GetSpeed());
+			plannedActions[i] = enemies[i].DecideTurn();
+			plannedIntentPending[i] = true;
+			weaknessKnown[i] = bestiary.IsWeaknessKnown(enemies[i].GetName());
 		}
+		const int playerActions = player.ActionsPerRound(fastestEnemySpeed);
+		CombatRuntime runtime;
 
-		bool playerFirst = playerSpeed >= enemySpeed;
+		CombatDisplay::PrintRoundHeader(roundNumber, player, enemies, knowledge,
+			weaknessKnown, initiativeOrder, plannedActions, plannedIntentPending);
 
-		// -- Player actions --
+		auto redrawCombat = [&]() {
+			for (size_t i = 0; i < enemies.size(); ++i) {
+				weaknessKnown[i] = bestiary.IsWeaknessKnown(enemies[i].GetName());
+			}
+			CombatDisplay::PrintRoundHeader(roundNumber, player, enemies, knowledge,
+				weaknessKnown, initiativeOrder, plannedActions, plannedIntentPending);
+		};
+
 		auto doPlayerActions = [&]() {
-			for (int i = 0; i < playerActions && player.IsAlive() && enemy.IsAlive(); ++i) {
-				if (playerActions > 1)
-					std::cout << "  [Action " << (i + 1) << "/" << playerActions << "]\n";
+			for (int actionNumber = 0;
+				actionNumber < playerActions && player.IsAlive()
+				&& CountLivingEnemies(enemies) > 0; ++actionNumber) {
+				if (playerActions > 1) {
+					std::cout << "\n  [Player Action " << (actionNumber + 1)
+						<< "/" << playerActions << "]\n";
+				}
 
-				TurnAction action = player.DecideTurn();
+				TurnAction action = CombatMenu::ChooseAction(player);
+				int targetIndex = FirstLivingEnemy(enemies);
+				if (ActionNeedsEnemyTarget(player, action)) {
+					targetIndex = CombatMenu::ChooseTarget(enemies,
+						action.type == ActionType::Inspect
+							? "Which enemy do you inspect?"
+							: "Choose a target:");
+				}
+				if (targetIndex < 0) {
+					--actionNumber;
+					continue;
+				}
 
+				Enemy& target = enemies[targetIndex];
 				if (action.type == ActionType::Inspect) {
 					player.SetDefending(false);
-					knowledge = InspectEnemy(player, enemy, knowledge);
-					bestiary.RecordEnemy(enemy, knowledge);
-					enemy.PrintStatus(knowledge);
+					knowledge[targetIndex] = InspectEnemy(
+						player, target, knowledge[targetIndex]);
+					bestiary.RecordEnemy(target, knowledge[targetIndex]);
+					for (size_t i = 0; i < enemies.size(); ++i) {
+						if (enemies[i].GetName() == target.GetName()
+							&& knowledge[i] < knowledge[targetIndex]) {
+							knowledge[i] = knowledge[targetIndex];
+						}
+					}
+					target.PrintStatus(knowledge[targetIndex]);
+					if (plannedIntentPending[targetIndex]) {
+						std::cout << "  Updated read:\n";
+						CombatDisplay::PrintEnemyIntent(targetIndex, target,
+							plannedActions[targetIndex], knowledge[targetIndex],
+							player.GetIntelligence());
+					}
+					if (huntersLensAvailable) {
+						huntersLensAvailable = false;
+						--actionNumber;
+						Console::PrintSlow("  (Hunter's Lens: this Inspect action was free.)");
+					}
 				}
 				else if (action.type == ActionType::UseItem) {
 					if (action.itemIndex == -2) {
-						// Bestiary view (free action)
 						bestiary.Print();
-						i--;
+						redrawCombat();
+						--actionNumber;
 					}
 					else {
 						player.SetDefending(false);
 						int hp = player.GetHP();
 						int mana = player.GetMana();
-						player.GetInventory().UseItem(
-							action.itemIndex, hp, player.GetMaxHP(), mana, player.GetMaxMana());
+						player.GetInventory().UseItem(action.itemIndex, hp,
+							player.GetMaxHP(), mana, player.GetMaxMana());
 						if (hp > player.GetHP()) player.Heal(hp - player.GetHP());
 						if (mana > player.GetMana()) player.RestoreMana(mana - player.GetMana());
 					}
 				}
 				else {
 					player.SetDefending(false);
-					ExecuteAction(player, enemy, action, gameStats, &enemy, true, &bestiary);
-
-					// Player actions can be lethal to the player too: a Bash can
-					// recoil, and attacking a matching stance can trigger a counter.
-					if (!player.IsAlive()) {
-						AttemptDeathSave(player, deathSaveUsed);
+					const bool targetWasAlive = target.IsAlive();
+					ExecuteAction(player, target, action, gameStats, &target, true, &bestiary);
+					if (targetWasAlive && !target.IsAlive()) {
+						AnnounceEnemyDefeat(enemies, targetIndex);
+						RecordEnemyDefeat(player, target, gameStats, bestiary);
 					}
+					if (!player.IsAlive()) AttemptDeathSave(player, deathSaveUsed);
 				}
 			}
 		};
 
-		// -- Enemy actions --
-		auto doEnemyActions = [&]() {
-			for (int i = 0; i < enemyActions && player.IsAlive() && enemy.IsAlive(); ++i) {
-				if (enemyActions > 1)
-					std::cout << "  [Enemy Action " << (i + 1) << "/" << enemyActions << "]\n";
+		auto doEnemyActions = [&](int enemyIndex) {
+			Enemy& enemy = enemies[enemyIndex];
+			for (int actionNumber = 0;
+				actionNumber < enemyActions[enemyIndex] && player.IsAlive()
+				&& enemy.IsAlive(); ++actionNumber) {
+				if (enemyActions[enemyIndex] > 1) {
+					std::cout << "  [E" << (enemyIndex + 1) << " Action "
+						<< (actionNumber + 1) << "/" << enemyActions[enemyIndex] << "]\n";
+				}
 
-				TurnAction action = enemy.DecideTurn();
+				TurnAction action;
+				if (actionNumber == 0) {
+					action = plannedActions[enemyIndex];
+					plannedIntentPending[enemyIndex] = false;
+				}
+				else {
+					action = enemy.DecideTurn();
+					CombatDisplay::PrintEnemyIntent(enemyIndex, enemy, action,
+						knowledge[enemyIndex], player.GetIntelligence(), true);
+				}
+
+				const bool enemyWasAlive = enemy.IsAlive();
 				enemy.SetDefending(false);
-				ExecuteAction(enemy, player, action, gameStats, nullptr, false);
-
-				// Death-save QTE: if the player just died, give them one chance
-				if (!player.IsAlive()) {
-					AttemptDeathSave(player, deathSaveUsed);
+				ExecuteAction(enemy, player, action, gameStats, nullptr, false,
+					nullptr, &runtime);
+				if (enemyWasAlive && !enemy.IsAlive()) {
+					AnnounceEnemyDefeat(enemies, enemyIndex);
+					RecordEnemyDefeat(player, enemy, gameStats, bestiary);
+				}
+				if (!player.IsAlive()) AttemptDeathSave(player, deathSaveUsed);
+				if (runtime.defenseQteOccurred && player.IsAlive()
+					&& CountLivingEnemies(enemies) > 0) {
+					runtime.defenseQteOccurred = false;
+					redrawCombat();
 				}
 			}
 		};
 
-		if (playerFirst) {
-			doPlayerActions();
-			if (enemy.IsAlive()) doEnemyActions();
-		}
-		else {
-			doEnemyActions();
-			if (player.IsAlive()) doPlayerActions();
+		for (int actor : initiativeOrder) {
+			if (!player.IsAlive() || CountLivingEnemies(enemies) == 0) break;
+			if (actor < 0) doPlayerActions();
+			else if (enemies[actor].IsAlive()) doEnemyActions(actor);
 		}
 
-		// End of round: wait for input then clear
-		if (player.IsAlive() && enemy.IsAlive()) {
+		if (player.IsAlive() && CountLivingEnemies(enemies) > 0) {
 			Console::WaitForEnter();
 			Console::Clear();
 		}
+		++roundNumber;
 	}
 
-	seenEnemyTypes.insert(enemy.GetName());
+	for (const Enemy& enemy : enemies) seenEnemyTypes.insert(enemy.GetName());
 
 	if (player.IsAlive()) {
-		Console::PrintSlow("\n  " + PickRandom({
-			"** " + enemy.GetName() + " has been defeated! **",
-			"** " + enemy.GetName() + " crumbles to the ground! **",
-			"** " + enemy.GetName() + " falls! Victory! **",
-			"** You vanquish the " + enemy.GetName() + "! **",
-		}));
-		gameStats.totalKills++;
-		bestiary.RecordKill(enemy.GetName());
-
-		player.GainXP(enemy.GetXPReward());
-
-		for (const auto& spell : enemy.GetKnownSpells()) {
-			player.TryLearnSpell(spell);
+		Console::PrintSlow(enemies.size() == 1
+			? "\n  ** You vanquish the " + enemies.front().GetName() + "! **"
+			: "\n  ** The enemy group is broken. You survive the ambush! **");
+		for (Enemy& enemy : enemies) {
+			player.GainXP(enemy.GetXPReward());
+			for (const Spell& spell : enemy.GetKnownSpells()) {
+				player.TryLearnSpell(spell);
+			}
 		}
-
 		Console::WaitForEnter();
 		Console::Clear();
 		return true;
 	}
-	else {
-		Console::PrintSlow("\n  " + PickRandom({
-			player.GetName() + " has fallen in combat...",
-			player.GetName() + " collapses to the floor...",
-			"Darkness closes in... " + player.GetName() + " is no more.",
-		}));
-		Console::WaitForEnter();
-		Console::Clear();
-		return false;
-	}
+
+	Console::PrintSlow("\n  " + PickRandom({
+		player.GetName() + " has fallen in combat...",
+		player.GetName() + " collapses beneath the assault...",
+		"Darkness closes in... " + player.GetName() + " is no more.",
+	}));
+	Console::WaitForEnter();
+	Console::Clear();
+	return false;
 }

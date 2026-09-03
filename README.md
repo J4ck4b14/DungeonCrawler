@@ -10,48 +10,72 @@ A terminal roguelike written from scratch in C++20. Runs natively — and in you
  
 You descend a procedurally generated dungeon. There is no final boss and no bottom floor — enemies grow stronger faster than you do, and eventually the dungeon forms a wall your build cannot climb. **Victory is escaping alive.** Every extra floor you descend is greed.
  
-- **Directional combat** — three attack styles (Slash / Thrust / Bash), four defensive stances, and real parries. Read your enemy, guess right, and their attack becomes your counter.
-- **Relics** — after every floor you clear, choose one of three ancient relics. Most carry a price. All are permanent. Runs build differently every time.
+- **Reactive combat** — commit to Defend, track falling WASD cues, and catch them at the guard line. Complete the sequence to block; perfect every cue to take no damage and counterattack.
+- **Enemy groups** — deeper floors can surround you with two or three independently acting foes. The combat panel shows their stable target labels, intents, and initiative order.
+- **Legacy progression** — every completed run awards persistent Legacy XP. New ranks unlock additional relics for future descents while each hero's combat level remains run-specific.
+- **Tiered relics** — floor rewards draw from unlocked, depth-appropriate common, uncommon, and rare pools. Relics last for the current run; catalogue unlocks persist in the profile.
 - **Perception** — survey rooms, spot hidden passages, break walls (not the bedrock, though — we learned that the hard way).
 - **Bestiary** — inspect enemies to learn their stats and weaknesses across runs.
 - **Death saves** — at death's door, a heartbeat QTE gives you one last chance. Match the rhythm or flatline.
 - **Permadeath.** Obviously.
 ### Design notes
  
-Enemy stats scale **exponentially** per floor (compounding 10%) while XP rewards scale linearly, so player power mathematically cannot keep pace forever. The balance was tuned with automated bot playtesting: a bot that spams a single attack and never defends dies around floor 13. A player who actually parries, uses items, and picks relics wisely gets further. That gap is the game.
+Enemy stats scale **exponentially** per floor (compounding 10%) while XP rewards scale linearly, so player power mathematically cannot keep pace forever. This architecture pass intentionally preserves those existing values; balancing is a separate phase.
  
 ## Tech
  
-- **C++20, no frameworks.** ~4,500 lines: procedural dungeon generation, combat system, entity hierarchy, perception system.
-- **Runs in the browser via WebAssembly.** The game is built on blocking console I/O (`std::cin`), which browsers don't allow. The port (Emscripten + Asyncify) swaps the standard stream buffers for custom `streambuf`s that suspend the C++ call stack while an [xterm.js](https://xtermjs.org/) terminal waits for input — so all game logic runs unmodified. See [`src/platform/`](src/platform/) and [`BUILD-WEB.md`](BUILD-WEB.md).
-- **Bot playtesting.** Balance was validated with Node.js drivers that parse the game's menus and play autonomously (30,000+ inputs, zero crashes). One of them found a memory corruption bug that had been silently lurking in the native build.
+- **C++20, no gameplay framework.** Procedural dungeon generation, combat, persistent progression, perception, and terminal presentation remain explicit project-owned systems.
+- **Runs in the browser via WebAssembly.** The game is built on blocking console I/O (`std::cin`), which browsers don't allow. The Emscripten layer in [`src/platform/`](src/platform/) redirects the standard streams and supports asynchronous terminal input.
 ## Building
  
 ### Native (Windows / Linux / macOS)
  
-```
-cmake --preset default
-cmake --build build
+```sh
+# Windows (run from a Visual Studio developer shell)
+cmake --preset x64-debug
+cmake --build --preset x64-debug
+ctest --preset x64-debug
+
+# Optional memory-safety check on Windows
+cmake --preset x64-asan
+cmake --build --preset x64-asan
+ctest --preset x64-asan
+
+# Linux
+cmake --preset linux-debug
+cmake --build --preset linux-debug
+ctest --preset linux-debug
 ```
  
-Requires CMake 3.15+ and a C++20 compiler.
+Requires CMake 3.21+ and a C++20 compiler.
  
 ### Web (itch.io)
  
-See [`BUILD-WEB.md`](BUILD-WEB.md) for the full Emscripten build command, the list of web-specific patches, and the packaging steps for itch.io.
+The Emscripten compatibility layer is under [`src/platform/`](src/platform/). Web packaging is maintained separately from this native CMake project.
  
 ## Project structure
  
 ```
 src/
+├── audio/      Optional scene music playback
 ├── core/       Game loop, relics, stats, dev mode
-├── combat/     Turn-based combat, parries, death saves
+├── combat/     Turn-based combat and testable defense timing rules
 ├── dungeon/    Procedural floors, rooms, perception
-├── entities/   Player, enemies, enemy factory
+├── entities/   Player, enemies, definitions, factory
 ├── items/      Inventory
-├── platform/   Web (Emscripten) console layer
+├── platform/   Profile storage, timed input, native/web terminal support
+├── presentation/ Terminal menus, panels, and defense animation
+├── progression/ Persistent Legacy profile and run rewards
 └── utils/      Console helpers, RNG
+tests/          Focused gameplay-rule regression tests
 ```
+
+## Persistent profile
+
+Native builds store the Legacy profile in the user's platform data directory
+(`%LOCALAPPDATA%/DungeonCrawler/profile.dat` on Windows). Browser builds use
+local storage. The versioned text format uses stable relic keys so catalogue
+changes do not depend on enum ordering.
  
 ---
  

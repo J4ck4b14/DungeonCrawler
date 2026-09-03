@@ -5,8 +5,8 @@ class Player;
 
 class Perception {
 public:
-	// Roll a d20 + INT modifier. Returns the roll result (1-20 base).
-	static int Roll(const Player& player);
+	// Roll the base d20. The caller applies the player's INT modifier.
+	static int Roll();
 
 	// Generate a description based on the roll for what the player senses
 	// about adjacent rooms. This creates PerceptionHints that become canonical.

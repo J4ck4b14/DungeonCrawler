@@ -20,7 +20,6 @@ struct Stats {
 	int atk = 0;
 	int speed = 0;
 	int intelligence = 0;
-	int mana = 0;
 	int maxMana = 0;
 
 	void RecalculateDerived() {

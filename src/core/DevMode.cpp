@@ -10,6 +10,7 @@ namespace DevMode {
 	static bool  s_removeStartingItems = false;
 
 	void Enable() { s_enabled = true; }
+	void Disable() { s_enabled = false; }
 	bool IsEnabled() { return s_enabled; }
 
 	float GetEnemyScale() { return s_enemyScale; }

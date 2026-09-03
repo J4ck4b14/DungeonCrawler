@@ -90,7 +90,7 @@ inline std::string GetDescription(const std::string& enemyName, int playerIntAtD
 			"Huge. Smells. Tough.",
 			"A troll—slow, stubborn, and terrifying up close.",
 			"Its swings are wide and costly. Survive the first, then punish the second.",
-			"A heavy-mass predator. It relies on sweeping commitment; bait the strike, evade by stance, then retaliate before it re-centers."
+			"A heavy-mass predator. It relies on sweeping commitment; catch the strike at the guard line, then retaliate before it re-centers."
 		}},
 		{"Werewolf", {
 			"Wolf man. Teeth.",
@@ -107,14 +107,14 @@ inline std::string GetDescription(const std::string& enemyName, int playerIntAtD
 		{"Dark Mage", {
 			"Scary robe. Magic.",
 			"A dark mage channeling multiple elements with practiced conviction.",
-			"Versatile and dangerous. Anticipate spell variety—defense stance matters.",
-			"A versatile arcane combatant. Expect elemental cycling; counter by reading mana usage and selecting anti-magic defense at high-risk moments."
+			"Versatile and dangerous. Anticipate longer defensive sequences against stronger spells.",
+			"A versatile arcane combatant. Expect elemental cycling; read its mana usage and prepare for demanding multi-cue spell guards."
 		}},
 		{"Demon", {
 			"Horn thing. Very bad.",
 			"A demon—malice made flesh. The air feels wrong around it.",
 			"Aggression is its language. Survive the first assault; it bleeds momentum after.",
-			"A hostile outsider with violent initiative. It escalates quickly—prioritize tempo control, defensive prediction, and resource-efficient damage."
+			"A hostile outsider with violent initiative. It escalates quickly—prioritize tempo control, precise guard timing, and resource-efficient damage."
 		}},
 		{"Giant", {
 			"Too big. Steps shake room.",

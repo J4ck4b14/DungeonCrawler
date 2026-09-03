@@ -1,10 +1,8 @@
 // Relic.h
 // -------
 // Roguelike relic (boon) system.
-// After clearing each floor, the player is offered a choice of 3 random
-// relics they don't own yet -- take one, or walk away. Relics persist for
-// the entire run and die with the hero. Most carry a tradeoff, so every
-// pick shapes the build.
+// Relics persist for one run. The profile controls which definitions may
+// appear, while minimum floor and rarity keep loot progression depth-aware.
 //
 // Effect hook locations:
 //   Stat relics       -> Player::GrantRelic (permanent stat mutation)
@@ -14,6 +12,11 @@
 //   Executioner's Edge-> CombatSystem physical dmg vs targets below 30% HP
 //   Arcane Battery    -> CombatSystem spell cast (mana cost -1, min 1)
 //   Phoenix Feather   -> Death-save QTE (+250ms reaction window)
+//   Hunter's Lens     -> CombatSystem Inspect action accounting
+//   Blood Ledger      -> CombatSystem enemy defeat handling
+//   Riposte/Aegis     -> CombatSystem reactive defense resolution
+//   Mana Prism        -> CombatSystem elemental weakness hit
+//   Last Ember        -> CombatSystem successful death save recovery
 
 #pragma once
 #include <string>
@@ -30,41 +33,32 @@ enum class RelicId {
 	ExecutionersEdge,  // +50% physical damage vs enemies below 30% HP
 	ArcaneBattery,     // Spells cost 1 less mana (minimum 1)
 	PhoenixFeather,    // Death-save heartbeats are easier to match
+	HuntersLens,       // First Inspect in each combat is a free action
+	BloodLedger,       // Defeating an enemy restores a little HP
+	RiposteSeal,       // Perfect parries empower the next attack
+	AegisCoil,         // First complete block each round restores Mana
+	ManaPrism,         // Exploiting a weakness restores Mana
+	LastEmber,         // Successful death saves restore more HP
 	COUNT
+};
+
+enum class RelicRarity {
+	Common,
+	Uncommon,
+	Rare
 };
 
 struct RelicInfo {
 	RelicId id;
+	const char* key;
 	const char* name;
 	const char* description;
+	RelicRarity rarity;
+	int unlockRank;
+	int minimumFloor;
 };
 
-inline const std::vector<RelicInfo>& AllRelics() {
-	static const std::vector<RelicInfo> relics = {
-		{ RelicId::BerserkersBrand,  "Berserker's Brand",
-		  "+3 ATK, but -6 max HP. Rage has a price." },
-		{ RelicId::GiantsBelt,       "Giant's Belt",
-		  "+18 max HP, but -1 ATK. Slow and steady." },
-		{ RelicId::AdrenalGland,     "Adrenal Gland",
-		  "+1 SPD, but -4 max HP. Strike first, bleed later." },
-		{ RelicId::ScholarsMonocle,  "Scholar's Monocle",
-		  "+2 INT (+6 max Mana, better perception), but -4 max HP." },
-		{ RelicId::VampiricFang,     "Vampiric Fang",
-		  "Heal 20% of the physical damage you deal." },
-		{ RelicId::ThornedCarapace,  "Thorned Carapace",
-		  "Enemies take 3 damage whenever they hurt you." },
-		{ RelicId::LuckyCoin,        "Lucky Coin",
-		  "Slash critical chance doubled (15% -> 30%)." },
-		{ RelicId::ExecutionersEdge, "Executioner's Edge",
-		  "+50% physical damage against enemies below 30% HP." },
-		{ RelicId::ArcaneBattery,    "Arcane Battery",
-		  "Spells cost 1 less mana (minimum 1)." },
-		{ RelicId::PhoenixFeather,   "Phoenix Feather",
-		  "Your heart beats slower at death's door (easier death saves)." },
-	};
-	return relics;
-}
-
-inline const RelicInfo& GetRelicInfo(RelicId id) {
-	return AllRelics()[static_cast<size_t>(id)];
-}
+const std::vector<RelicInfo>& AllRelics();
+const RelicInfo& GetRelicInfo(RelicId id);
+const RelicInfo* FindRelicByKey(const std::string& key);
+const char* RelicRarityName(RelicRarity rarity);

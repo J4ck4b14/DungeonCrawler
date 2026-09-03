@@ -18,6 +18,12 @@ enum class SpellTarget {
 	Self     // Buff/heal spell
 };
 
+enum class SpellEffect {
+	Damage,
+	Heal,
+	Empower
+};
+
 struct Spell {
 	std::string name;
 	SpellElement element = SpellElement::Arcane;   // default safe value
@@ -25,11 +31,32 @@ struct Spell {
 	int manaCost = 0;
 	int power = 0;             // Damage or heal amount (base)
 	int requiredIntelligence = 0; // Minimum INT to learn/use
+	SpellEffect effect = SpellEffect::Damage;
+	int duration = 0;          // Charges/turns used by non-instant effects
 
 	// Explicit constructor to guarantee initialization in all code paths
 	Spell() = default;
 	Spell(const std::string& n, SpellElement e, SpellTarget t, int m, int p, int req)
-		: name(n), element(e), target(t), manaCost(m), power(p), requiredIntelligence(req) {
+		: name(n), element(e), target(t), manaCost(m), power(p), requiredIntelligence(req),
+		  effect(t == SpellTarget::Enemy ? SpellEffect::Damage : SpellEffect::Heal) {
+	}
+	Spell(const std::string& n, SpellElement e, SpellTarget t, int m, int p, int req,
+		SpellEffect spellEffect, int effectDuration)
+		: name(n), element(e), target(t), manaCost(m), power(p), requiredIntelligence(req),
+		  effect(spellEffect), duration(effectDuration) {
+	}
+
+	std::string GetEffectSummary() const {
+		switch (effect) {
+		case SpellEffect::Damage:
+			return "Damage: " + std::to_string(power) + " + INT";
+		case SpellEffect::Heal:
+			return "Healing: " + std::to_string(power) + " + INT";
+		case SpellEffect::Empower:
+			return "+" + std::to_string(power) + "% damage, next "
+				+ std::to_string(duration) + " hits";
+		}
+		return "Unknown effect";
 	}
 
 	std::string GetElementName() const {
@@ -76,6 +103,10 @@ inline const std::vector<Spell>& GetSpellCatalog() {
 		Spell{"Heal",           SpellElement::Healing,    SpellTarget::Self,  2,   8, 1},
 		Spell{"Greater Heal",   SpellElement::Healing,    SpellTarget::Self,  5,  16, 3},
 		Spell{"Rejuvenation",   SpellElement::Healing,    SpellTarget::Self,  3,  12, 2},
+
+		// -- Support --
+		Spell{"Empower",        SpellElement::Arcane,     SpellTarget::Self,  2,  25, 1,
+			SpellEffect::Empower, 2},
 	};
 	return catalog;
 }

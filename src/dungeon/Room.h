@@ -37,6 +37,19 @@ enum class RoomContent {
 	Staircase   // Exit to next floor
 };
 
+// What the player remembers happening in a resolved room. This is deliberately
+// separate from RoomContent: a trap can be triggered or safely disarmed, and
+// perception text should describe the result rather than the original hazard.
+enum class RoomOutcome {
+	Unresolved,
+	EnemyDefeated,
+	ChestOpened,
+	Rested,
+	TrapTriggered,
+	TrapDisarmed,
+	EmptySearched
+};
+
 // Perception hint about an adjacent room (generated once, then locked in)
 struct PerceptionHint {
 	Direction direction;
@@ -53,6 +66,13 @@ enum class WallMaterial {
 	Strange   // exotic deep-materia (often vulnerable only to specific magic)
 };
 
+struct HiddenWall {
+	bool exists = false;
+	int toughness = 0;
+	WallMaterial material = WallMaterial::None;
+	SpellElement weakness = SpellElement::Arcane;
+};
+
 struct Room {
 	int x = 0;
 	int y = 0;
@@ -60,6 +80,7 @@ struct Room {
 	RoomContent content = RoomContent::Empty;
 	bool visited = false;
 	bool contentResolved = false;  // Has the encounter/chest/trap been dealt with?
+	RoomOutcome outcome = RoomOutcome::Unresolved;
 	bool perceptionUsed = false;   // Can only perceive once per room
 
 	// Which exits exist (N, E, S, W) - true means there's a passage
@@ -69,26 +90,22 @@ struct Room {
 	void SetExit(Direction d, bool open) { exits[static_cast<int>(d)] = open; }
 
 	// Hidden/breakable exits (not a normal passage until broken)
-	std::array<bool, 4> hiddenExits = {false, false, false, false};
-	// Hidden wall "HP" (internal, unknown to player)
-	std::array<int, 4> hiddenToughness = {0, 0, 0, 0};
-	// Material and hidden elemental weakness for the wall
-	std::array<WallMaterial, 4> hiddenMaterial = {
-		WallMaterial::None, WallMaterial::None, WallMaterial::None, WallMaterial::None
-	};
-	std::array<SpellElement, 4> hiddenWeakness = {
-		SpellElement::Arcane, SpellElement::Arcane, SpellElement::Arcane, SpellElement::Arcane
-	};
+	std::array<HiddenWall, 4> hiddenWalls{};
 
-	bool HasHiddenExit(Direction d) const { return hiddenExits[static_cast<int>(d)]; }
-	int GetHiddenToughness(Direction d) const { return hiddenToughness[static_cast<int>(d)]; }
-	void SetHiddenExit(Direction d, bool hasHidden, int toughness = 0) {
-		hiddenExits[static_cast<int>(d)] = hasHidden;
-		hiddenToughness[static_cast<int>(d)] = hasHidden ? toughness : 0;
-		if (!hasHidden) {
-			hiddenMaterial[static_cast<int>(d)] = WallMaterial::None;
-			hiddenWeakness[static_cast<int>(d)] = SpellElement::Arcane;
-		}
+	const HiddenWall& GetHiddenWall(Direction d) const {
+		return hiddenWalls[static_cast<int>(d)];
+	}
+	bool HasHiddenExit(Direction d) const { return GetHiddenWall(d).exists; }
+	int GetHiddenToughness(Direction d) const { return GetHiddenWall(d).toughness; }
+	void SetHiddenWall(Direction d, int toughness, WallMaterial material,
+		SpellElement weakness) {
+		hiddenWalls[static_cast<int>(d)] = {true, toughness, material, weakness};
+	}
+	void SetHiddenToughness(Direction d, int toughness) {
+		hiddenWalls[static_cast<int>(d)].toughness = toughness;
+	}
+	void ClearHiddenWall(Direction d) {
+		hiddenWalls[static_cast<int>(d)] = {};
 	}
 
 	// Perception hints that have been given about adjacent rooms FROM this room

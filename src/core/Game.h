@@ -2,6 +2,8 @@
 #include "entities/Player.h"
 #include "dungeon/Dungeon.h"
 
+class PlayerProfile;
+
 class Game {
 public:
 	Game() = default;
@@ -9,4 +11,5 @@ public:
 
 private:
 	void ShowTitle() const;
+	void RunAdventure(PlayerProfile& profile);
 };

@@ -89,3 +89,28 @@ int Entity::ConsumeAttackBuff(bool magical) {
 	}
 	return 0;
 }
+
+const AttackBuff& Entity::GetAttackBuff() const { return attackBuff_; }
+
+void Entity::ApplyPowerBuff(int percentBonus, int hits) {
+	percentBonus = std::max(0, percentBonus);
+	hits = std::max(0, hits);
+	if (powerBuff_.remainingHits > 0) {
+		powerBuff_.percentBonus = std::max(powerBuff_.percentBonus, percentBonus);
+		powerBuff_.remainingHits = std::max(powerBuff_.remainingHits, hits);
+	}
+	else {
+		powerBuff_.percentBonus = percentBonus;
+		powerBuff_.remainingHits = hits;
+	}
+}
+
+int Entity::ConsumePowerBuff(int damage) {
+	if (damage <= 0 || powerBuff_.remainingHits <= 0) return damage;
+	const int empowered = damage * (100 + powerBuff_.percentBonus) / 100;
+	--powerBuff_.remainingHits;
+	if (powerBuff_.remainingHits == 0) powerBuff_.percentBonus = 0;
+	return empowered;
+}
+
+const PowerBuff& Entity::GetPowerBuff() const { return powerBuff_; }

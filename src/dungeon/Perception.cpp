@@ -24,7 +24,71 @@
 #include <sstream>
 #include "core/DevMode.h"
 
-int Perception::Roll(const Player& player) {
+namespace {
+
+std::string RememberedOutcome(const Room& room) {
+	switch (room.outcome) {
+	case RoomOutcome::EnemyDefeated:
+		return "the signs of your finished battle remain, but no enemy does";
+	case RoomOutcome::ChestOpened:
+		return "the chest you opened stands empty";
+	case RoomOutcome::Rested:
+		return "the alcove where you rested is quiet";
+	case RoomOutcome::TrapTriggered:
+		return "the sprung trap that caught you lies spent";
+	case RoomOutcome::TrapDisarmed:
+		return "the trap you discovered is safely disarmed";
+	case RoomOutcome::EmptySearched:
+		return "you already searched the empty chamber";
+	case RoomOutcome::Unresolved:
+		break;
+	}
+
+	switch (room.content) {
+	case RoomContent::Combat: return "you already cleared the chamber";
+	case RoomContent::Chest: return "you already dealt with the chest";
+	case RoomContent::Rest: return "you already used the quiet alcove";
+	case RoomContent::Trap: return "the room's trap is no longer a threat";
+	case RoomContent::Empty: return "you already searched the empty chamber";
+	case RoomContent::Staircase: return "the staircase still leads deeper";
+	}
+	return "you remember the chamber clearly";
+}
+
+std::string DescribeRememberedDirection(Direction direction, const Room& room) {
+	return std::string("To the ") + DirectionName(direction) + ", "
+		+ RememberedOutcome(room) + ".";
+}
+
+std::string DescribeCurrentRoom(const Room& room) {
+	if (room.contentResolved) {
+		return "  Here: " + RememberedOutcome(room) + ".";
+	}
+	if (room.content == RoomContent::Staircase) {
+		return "  Here: the staircase waits for you to descend.";
+	}
+	return "  Here: this chamber has not been resolved.";
+}
+
+bool TryGetAdjacentRoom(Direction direction, const Room& currentRoom,
+	const std::vector<std::vector<Room>>& grid, int gridSize,
+	const Room*& adjacent) {
+	int x = currentRoom.x;
+	int y = currentRoom.y;
+	switch (direction) {
+	case Direction::North: --y; break;
+	case Direction::East: ++x; break;
+	case Direction::South: ++y; break;
+	case Direction::West: --x; break;
+	}
+	if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return false;
+	adjacent = &grid[y][x];
+	return true;
+}
+
+} // namespace
+
+int Perception::Roll() {
 	static RNG rng;
 	int base = rng.NextInt(1, 20);
 	// Apply dev-mode penalty (if enabled) to the raw d20. Minimum 1.
@@ -153,6 +217,9 @@ std::string Perception::DescribeDirection(Direction dir, const Room& adjacent,
 	int rollQuality) {
 	static RNG rng;
 	const char* dirName = DirectionName(dir);
+	if (adjacent.visited && adjacent.contentResolved) {
+		return DescribeRememberedDirection(dir, adjacent);
+	}
 
 	// rollQuality: -1 = nat 1 (misleading), 0 = terrible, 1 = poor,
 	//              2 = okay, 3 = good, 4 = great, 5 = nat20
@@ -190,6 +257,7 @@ std::string Perception::DescribeDirection(Direction dir, const Room& adjacent,
 void Perception::PerceiveFromRoom(Room& currentRoom,
 	const std::vector<std::vector<Room>>& grid,
 	int gridSize, const Player& player) {
+	std::cout << "\n" << DescribeCurrentRoom(currentRoom) << "\n";
 
 	if (currentRoom.perceptionUsed) {
 		std::cout << "  You've already surveyed this room.\n";
@@ -197,7 +265,15 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 		if (!currentRoom.hints.empty()) {
 			std::cout << "\n  You recall:\n";
 			for (const auto& hint : currentRoom.hints) {
-				std::cout << "    " << hint.description << "\n";
+				const Room* adjacent = nullptr;
+				if (TryGetAdjacentRoom(hint.direction, currentRoom, grid, gridSize, adjacent)
+					&& adjacent->visited && adjacent->contentResolved) {
+					std::cout << "    "
+						<< DescribeRememberedDirection(hint.direction, *adjacent) << "\n";
+				}
+				else {
+					std::cout << "    " << hint.description << "\n";
+				}
 			}
 		}
 		return;
@@ -205,7 +281,7 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 
 	currentRoom.perceptionUsed = true;
 
-	int rawRoll = Roll(player);
+	int rawRoll = Roll();
 	int total = rawRoll + player.GetIntelligence();
 
 	// Determine quality tier -- roll is HIDDEN from the player
