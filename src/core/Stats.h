@@ -1,14 +1,14 @@
 // Stats.h
 // -------
 // Core stat block shared by all entities (players and enemies).
-// Contains both raw allocation points (hp, atk, speed, intelligence)
+// Contains both raw allocation points (hp, strength, speed, intelligence)
 // and derived values (maxHp, maxMana) computed by RecalculateDerived().
 //
 // Stat formulas:
 //   maxHp   = 20 + hp * 5      (base 20 HP, +5 per point)
 //   maxMana = intelligence * 3  (3 mana per INT point)
 //
-// ATK and Speed are set directly during character creation / enemy generation.
+// Strength and Speed are set directly during character creation / enemy generation.
 
 #pragma once
 #include <string>
@@ -17,7 +17,7 @@
 struct Stats {
 	int hp = 0;       // Raw points allocated
 	int maxHp = 0;    // Derived
-	int atk = 0;
+	int strength = 0;
 	int speed = 0;
 	int intelligence = 0;
 	int maxMana = 0;
@@ -29,7 +29,7 @@ struct Stats {
 
 	void Print(const std::string& label) const {
 		std::cout << label << " Stats - HP: " << maxHp
-			<< " | ATK: " << atk
+			<< " | STR: " << strength
 			<< " | SPD: " << speed
 			<< " | INT: " << intelligence
 			<< " | Mana: " << maxMana << "\n";

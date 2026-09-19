@@ -45,24 +45,19 @@ void PrintStatusPanel(int floor, int playerX, int playerY,
 		<< " " << player.GetMana() << "/" << player.GetMaxMana() << "\n";
 	std::cout << "| XP " << DisplayUtils::MakeMeter(player.GetXP(), player.GetXPToNextLevel(), 18)
 		<< " " << player.GetXP() << "/" << player.GetXPToNextLevel()
-		<< "    ATK " << player.GetATK() << "  SPD " << player.GetSpeed()
+		<< "    STR " << player.GetStrength() << "  SPD " << player.GetSpeed()
 		<< "  INT " << player.GetIntelligence() << "\n";
 	std::cout << "| Inventory: " << player.GetInventory().Size()
 		<< " item(s)  |  Relics: " << player.GetRelics().size() << "\n";
+	if (player.GetEquipment().GetWeapon()) {
+		std::cout << "| Weapon: " << player.GetEquipment().GetWeapon()->GetDisplayName()
+			<< "  |  Damage " << player.GetWeaponDamage() << "\n";
+	}
 
-	const AttackBuff& attackBuff = player.GetAttackBuff();
 	const PowerBuff& powerBuff = player.GetPowerBuff();
-	if (attackBuff.remainingHits > 0 || powerBuff.remainingHits > 0) {
+	if (powerBuff.remainingHits > 0) {
 		std::cout << "| Active: ";
-		bool needsSeparator = false;
-		if (attackBuff.remainingHits > 0) {
-			std::cout << "+" << attackBuff.bonusDamage
-				<< (attackBuff.isMagical ? " spell" : " physical")
-				<< " damage (" << attackBuff.remainingHits << " hits)";
-			needsSeparator = true;
-		}
 		if (powerBuff.remainingHits > 0) {
-			if (needsSeparator) std::cout << "  |  ";
 			std::cout << "Empowered +" << powerBuff.percentBonus
 				<< "% (" << powerBuff.remainingHits << " hits)";
 		}

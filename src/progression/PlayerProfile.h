@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Bestiary.h"
 #include "core/Relic.h"
 
 #include <set>
@@ -15,14 +16,15 @@ struct CompletedRun {
 
 struct LegacyReward {
 	int xpEarned = 0;
-	int previousRank = 1;
-	int newRank = 1;
+	int previousRank = 0;
+	int newRank = 0;
 	std::vector<RelicId> newlyUnlockedRelics;
 };
 
 class PlayerProfile {
 public:
-	static constexpr int CurrentVersion = 1;
+	static constexpr int CurrentVersion = 2;
+	static constexpr int MaximumLegacyRank = 50;
 
 	PlayerProfile();
 
@@ -38,6 +40,8 @@ public:
 
 	bool IsRelicUnlocked(RelicId id) const;
 	const std::set<RelicId>& GetUnlockedRelics() const;
+	Bestiary& GetBestiary();
+	const Bestiary& GetBestiary() const;
 
 	int GetMusicVolume() const;
 	bool IsMusicMuted() const;
@@ -64,6 +68,7 @@ private:
 	int musicVolume_ = 70;
 	bool musicMuted_ = false;
 	std::set<RelicId> unlockedRelics_;
+	Bestiary bestiary_;
 
 	void RefreshRankUnlocks(std::vector<RelicId>* newlyUnlocked = nullptr);
 };

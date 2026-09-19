@@ -27,12 +27,12 @@ inline int EffectiveManaCost(int baseCost, bool hasArcaneBattery) {
 	return hasArcaneBattery ? std::max(1, baseCost - 1) : baseCost;
 }
 
-inline int PhysicalCounterDamage(int attack) {
-	return static_cast<int>(attack * PhysicalCounterMultiplier);
+inline int PhysicalCounterDamage(int strength) {
+	return static_cast<int>(strength * PhysicalCounterMultiplier);
 }
 
-inline int MagicCounterDamage(int attack) {
-	return std::max(1, static_cast<int>(attack * MagicCounterMultiplier));
+inline int MagicCounterDamage(int strength) {
+	return std::max(1, static_cast<int>(strength * MagicCounterMultiplier));
 }
 
 } // namespace CombatRules

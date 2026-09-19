@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -26,6 +27,26 @@ std::vector<std::string> Split(const std::string& value, char delimiter) {
 	return parts;
 }
 
+int OldXPRequiredForRank(int rank) {
+	if (rank <= 1) return 0;
+	return 25 * (rank - 1) * (rank + 1);
+}
+
+int MigrateVersionOneXP(int oldXp) {
+	oldXp = std::max(0, oldXp);
+	int oldRank = 1;
+	while (oldRank < 100 && oldXp >= OldXPRequiredForRank(oldRank + 1)) ++oldRank;
+	const int mappedRank = std::min(oldRank, PlayerProfile::MaximumLegacyRank);
+	if (mappedRank >= PlayerProfile::MaximumLegacyRank)
+		return PlayerProfile::XPRequiredForRank(PlayerProfile::MaximumLegacyRank);
+	const int oldFloor = OldXPRequiredForRank(oldRank);
+	const int oldSpan = std::max(1, OldXPRequiredForRank(oldRank + 1) - oldFloor);
+	const double progress = static_cast<double>(oldXp - oldFloor) / oldSpan;
+	const int newFloor = PlayerProfile::XPRequiredForRank(mappedRank);
+	const int newSpan = PlayerProfile::XPRequiredForRank(mappedRank + 1) - newFloor;
+	return newFloor + static_cast<int>(std::floor(progress * newSpan));
+}
+
 } // namespace
 
 PlayerProfile::PlayerProfile() {
@@ -35,17 +56,20 @@ PlayerProfile::PlayerProfile() {
 int PlayerProfile::GetLegacyXP() const { return legacyXP_; }
 
 int PlayerProfile::GetLegacyRank() const {
-	int rank = 1;
-	while (rank < 100 && legacyXP_ >= XPRequiredForRank(rank + 1)) ++rank;
+	int rank = 0;
+	while (rank < MaximumLegacyRank
+		&& legacyXP_ >= XPRequiredForRank(rank + 1)) ++rank;
 	return rank;
 }
 
 int PlayerProfile::GetXPIntoRank() const {
+	if (GetLegacyRank() >= MaximumLegacyRank) return 0;
 	return legacyXP_ - XPRequiredForRank(GetLegacyRank());
 }
 
 int PlayerProfile::GetXPForNextRank() const {
 	const int rank = GetLegacyRank();
+	if (rank >= MaximumLegacyRank) return 0;
 	return XPRequiredForRank(rank + 1) - XPRequiredForRank(rank);
 }
 
@@ -63,6 +87,9 @@ const std::set<RelicId>& PlayerProfile::GetUnlockedRelics() const {
 	return unlockedRelics_;
 }
 
+Bestiary& PlayerProfile::GetBestiary() { return bestiary_; }
+const Bestiary& PlayerProfile::GetBestiary() const { return bestiary_; }
+
 int PlayerProfile::GetMusicVolume() const { return musicVolume_; }
 bool PlayerProfile::IsMusicMuted() const { return musicMuted_; }
 
@@ -79,7 +106,8 @@ LegacyReward PlayerProfile::CompleteRun(const CompletedRun& run) {
 	reward.previousRank = GetLegacyRank();
 	reward.xpEarned = CalculateRunXP(run);
 
-	legacyXP_ += reward.xpEarned;
+	legacyXP_ = std::min(XPRequiredForRank(MaximumLegacyRank),
+		legacyXP_ + reward.xpEarned);
 	++runs_;
 	if (run.escaped) ++escapes_;
 	else ++deaths_;
@@ -91,8 +119,8 @@ LegacyReward PlayerProfile::CompleteRun(const CompletedRun& run) {
 }
 
 int PlayerProfile::XPRequiredForRank(int rank) {
-	if (rank <= 1) return 0;
-	return 25 * (rank - 1) * (rank + 1);
+	rank = std::clamp(rank, 0, MaximumLegacyRank);
+	return 25 * rank * (rank + 1);
 }
 
 int PlayerProfile::CalculateRunXP(const CompletedRun& run) {
@@ -131,18 +159,25 @@ std::string PlayerProfile::Serialize() const {
 		output << GetRelicInfo(id).key;
 	}
 	output << '\n';
+	for (const std::string& entry : bestiary_.SerializeEntries()) {
+		output << "bestiary_entry=" << entry << '\n';
+	}
 	return output.str();
 }
 
 bool PlayerProfile::Deserialize(const std::string& text, PlayerProfile& profile,
 	std::string* errorMessage) {
 	std::unordered_map<std::string, std::string> fields;
+	std::vector<std::string> bestiaryEntries;
 	std::istringstream input(text);
 	std::string line;
 	while (std::getline(input, line)) {
 		const size_t separator = line.find('=');
 		if (separator == std::string::npos) continue;
-		fields[line.substr(0, separator)] = line.substr(separator + 1);
+		const std::string key = line.substr(0, separator);
+		const std::string value = line.substr(separator + 1);
+		if (key == "bestiary_entry") bestiaryEntries.push_back(value);
+		else fields[key] = value;
 	}
 
 	int version = 0;
@@ -162,6 +197,8 @@ bool PlayerProfile::Deserialize(const std::string& text, PlayerProfile& profile,
 		}
 	};
 	readNonNegative("legacy_xp", parsed.legacyXP_);
+	if (version == 1) parsed.legacyXP_ = MigrateVersionOneXP(parsed.legacyXP_);
+	parsed.legacyXP_ = std::min(parsed.legacyXP_, XPRequiredForRank(MaximumLegacyRank));
 	readNonNegative("runs", parsed.runs_);
 	readNonNegative("deaths", parsed.deaths_);
 	readNonNegative("escapes", parsed.escapes_);
@@ -183,6 +220,16 @@ bool PlayerProfile::Deserialize(const std::string& text, PlayerProfile& profile,
 		}
 	}
 	parsed.RefreshRankUnlocks();
+	if (version >= 2) {
+		for (const std::string& entry : bestiaryEntries) {
+			std::string bestiaryError;
+			if (!parsed.bestiary_.DeserializeEntry(entry, &bestiaryError)) {
+				if (errorMessage) *errorMessage = bestiaryError;
+				return false;
+			}
+		}
+	}
+	parsed.version_ = CurrentVersion;
 	profile = parsed;
 	return true;
 }

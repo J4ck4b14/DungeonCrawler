@@ -83,7 +83,7 @@ bool TryGetAdjacentRoom(Direction direction, const Room& currentRoom,
 	}
 	if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return false;
 	adjacent = &grid[y][x];
-	return true;
+	return adjacent->exists;
 }
 
 } // namespace
@@ -100,35 +100,31 @@ int Perception::Roll() {
 	return base;
 }
 
-std::string Perception::DescribeWall(Direction dir, bool hasHidden, int toughness) {
-	static RNG rng;
+std::string Perception::DescribeWall(Direction dir, bool unusual,
+	bool breakable, int toughness, int quality, int playerStrength) {
 	const char* dirName = DirectionName(dir);
 
-	// If there's a hidden/brittle wall here, prefer descriptions that hint weakness
-	if (hasHidden) {
-		std::vector<std::string> weakDescs = {
-			std::string("To the ") + dirName + (", the masonry looks cracked and brittle."),
-			std::string("The ") + dirName + (" wall has loose stones; it could be forced."),
-			std::string("A seam in the wall to the ") + dirName + (" suggests it may yield to force."),
-			std::string("The wall ") + dirName + (" is crumbly; a determined shove might open a passage.")
-		};
-		// If we want to subtly indicate toughness, append a hint for very high toughness
-		std::string base = weakDescs[rng.NextInt(0, static_cast<int>(weakDescs.size()) - 1)];
+	if (unusual && !breakable) {
+		return std::string("The wall to the ") + dirName
+			+ " returns an unusual hollow echo, but its face is solid and unyielding.";
+	}
+
+	if (unusual && breakable) {
+		std::string base = std::string("A fractured seam marks the wall to the ")
+			+ dirName + ".";
 		if (toughness >= 14) {
-			base += " It looks especially sturdy, however.";
-		} else if (toughness <= 8) {
-			base += " It seems fragile enough for a strong shove.";
+			base += " It looks sturdy despite the damage.";
+		} else if (quality >= 3) {
+			base += " The weakened stones appear breakable.";
+		}
+		if (quality >= 3 && playerStrength >= toughness) {
+			base += " Your strength should be enough to force it.";
 		}
 		return base;
 	}
 
-	std::vector<std::string> wallDescs = {
-		std::string("To the ") + dirName + (", there's a solid stone wall."),
-		std::string("The ") + dirName + (" side is blocked by crumbling masonry."),
-		std::string("A rough wall of rock blocks the way ") + dirName + ("."),
-		std::string("To the ") + dirName + (", moss-covered bricks form an impassable barrier.")
-	};
-	return wallDescs[rng.NextInt(0, static_cast<int>(wallDescs.size()) - 1)];
+	return std::string("To the ") + dirName
+		+ ", a continuous wall of solid stone blocks the way.";
 }
 
 // For nat-1 misleading: swap the content to something wrong
@@ -329,24 +325,34 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 
 			bool inBounds = !(nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize);
 			bool hasHidden = false;
+			bool breakable = false;
 			int toughness = 0;
 			if (inBounds) {
 				// Check either the current room's hidden flag in that direction (preferred)
 				// or the adjacent room's opposite hidden flag (symmetry).
 				if (currentRoom.HasHiddenExit(dir)) {
 					hasHidden = true;
-					toughness = currentRoom.GetHiddenToughness(dir);
+					const HiddenWall& wall = currentRoom.GetHiddenWall(dir);
+					breakable = wall.breakable;
+					toughness = wall.toughness;
 				}
 				else {
 					const Room& adj = grid[ny][nx];
 					if (adj.HasHiddenExit(OppositeDirection(dir))) {
 						hasHidden = true;
-						toughness = adj.GetHiddenToughness(OppositeDirection(dir));
+						const HiddenWall& wall = adj.GetHiddenWall(OppositeDirection(dir));
+						breakable = wall.breakable;
+						toughness = wall.toughness;
 					}
 				}
 			}
 
-			std::string desc = DescribeWall(dir, hasHidden, toughness);
+			// Generator truth is not a clue. Only a successful deliberate survey
+			// changes the wall from UNKNOWN to SUSPECTED, without revealing geometry.
+			const bool detected = hasHidden && quality >= 2;
+			if (detected) currentRoom.SetWallKnowledge(dir, WallKnowledge::Suspected);
+			std::string desc = DescribeWall(dir, detected,
+				detected && breakable, toughness, quality, player.GetStrength());
 			std::cout << "    " << desc << "\n";
 			continue;
 		}

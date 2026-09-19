@@ -14,12 +14,14 @@ public:
 		const std::vector<std::vector<Room>>& grid,
 		int gridSize, const Player& player);
 
+	// A concealed space may sound unusual without implying its wall can break.
+	static std::string DescribeWall(Direction dir, bool unusual = false,
+		bool breakable = false, int toughness = 0, int quality = 0,
+		int playerStrength = 0);
+
 private:
 	// Describe a direction based on how much was revealed
 	static std::string DescribeDirection(Direction dir, const Room& adjacent, 
 		int rollQuality);
 	
-	// Describe a wall (no exit in that direction). The hasHidden flag
-	// indicates a brittle/breakable wall; toughness gives its break target.
-	static std::string DescribeWall(Direction dir, bool hasHidden = false, int toughness = 0);
 };

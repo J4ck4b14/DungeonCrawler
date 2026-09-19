@@ -23,8 +23,8 @@
 #include <vector>
 
 enum class RelicId {
-	BerserkersBrand,   // +3 ATK, -6 max HP
-	GiantsBelt,        // +18 max HP, -1 ATK
+	BerserkersBrand,   // +3 STR, -6 max HP
+	GiantsBelt,        // +18 max HP, -1 STR
 	AdrenalGland,      // +1 SPD, -4 max HP
 	ScholarsMonocle,   // +2 INT (+6 max Mana), -4 max HP
 	VampiricFang,      // Heal 20% of physical damage you deal

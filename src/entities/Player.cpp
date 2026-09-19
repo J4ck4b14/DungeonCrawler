@@ -6,9 +6,11 @@
 
 #include "Player.h"
 #include "combat/CombatRules.h"
+#include "presentation/EquipmentMenu.h"
 #include <iostream>
 #include <limits>
 #include <algorithm>
+#include <utility>
 
 Player::Player(const std::string& name, const Stats& stats)
 	: Entity(name, stats), rawHp_(stats.hp) {}
@@ -23,7 +25,7 @@ Stats Player::AllocateStats(int pool) {
 
 	std::cout << "\n=== CHARACTER CREATION ===\n";
 	std::cout << "You have " << pool << " points to distribute.\n";
-	std::cout << "Stats: Health, Attack, Speed, Intelligence\n";
+	std::cout << "Stats: Health, Strength, Speed, Intelligence\n";
 	std::cout << "(Remaining points will go to Intelligence)\n\n";
 
 	auto readStat = [&](const std::string& label, int& stat) {
@@ -44,7 +46,7 @@ Stats Player::AllocateStats(int pool) {
 	};
 
 	readStat("Health",  stats.hp);
-	readStat("Attack",  stats.atk);
+	readStat("Strength", stats.strength);
 	readStat("Speed",   stats.speed);
 
 	// Remaining points go to intelligence
@@ -53,7 +55,7 @@ Stats Player::AllocateStats(int pool) {
 
 	// Convert raw allocation to actual combat values
 	// Keep raw hp for later recalculation
-	stats.atk = 2 + stats.atk * 2;       // Base 2 ATK + 2 per point
+	stats.strength = 2 + stats.strength * 2; // Base 2 STR + 2 per point
 	stats.speed = 2 + stats.speed;        // Base 2 SPD + 1 per point
 	stats.RecalculateDerived();            // Sets maxHp and maxMana
 
@@ -87,9 +89,9 @@ void Player::AllocateLevelUpPoints() {
 	};
 
 	// We work on raw allocation values and then recompute
-	int atkBonus = 0, spdBonus = 0, intBonus = 0, hpBonus = 0;
+	int strengthBonus = 0, spdBonus = 0, intBonus = 0, hpBonus = 0;
 	readStat("Health",       hpBonus);
-	readStat("Attack",       atkBonus);
+	readStat("Strength",     strengthBonus);
 	readStat("Speed",        spdBonus);
 	if (pool > 0) {
 		intBonus = pool;
@@ -99,14 +101,14 @@ void Player::AllocateLevelUpPoints() {
 	// Apply bonuses
 	rawHp_ += hpBonus;
 	stats_.hp = rawHp_;
-	stats_.atk += atkBonus * 2;
+	stats_.strength += strengthBonus * 2;
 	stats_.speed += spdBonus;
 	stats_.intelligence += intBonus;
 	RecalcDerivedWithRelics();
 
 	// Heal to new max on level up
 	currentHp_ = stats_.maxHp;
-	currentMana_ = stats_.maxMana;
+	currentMana_ = GetMaxMana();
 
 	std::cout << "\n";
 	stats_.Print("Updated");
@@ -135,7 +137,41 @@ int Player::GetRawHP() const { return rawHp_; }
 
 // -- Training system --
 int Player::GetTrainingPoints() const { return trainingPoints_; }
-bool Player::CanTrain() const { return trainingPoints_ < MAX_TRAINING; }
+bool Player::CanTrain() const { return true; }
+
+int Player::GetSpeed() const {
+	return stats_.speed + equipment_.GetTotalApparelEffects().speed;
+}
+
+int Player::GetMaxMana() const {
+	return stats_.maxMana + equipment_.GetTotalApparelEffects().maxMana;
+}
+
+int Player::GetWeaponDamage() const {
+	if (!equipment_.GetWeapon()) return GetStrength();
+	return equipment_.GetWeapon()->CalculateDamage(
+		GetStrength(), GetSpeed(), GetIntelligence());
+}
+
+int Player::GetArmor() const {
+	return equipment_.GetTotalApparelEffects().armor;
+}
+
+int Player::GetSpellPowerBonus() const {
+	return equipment_.GetTotalApparelEffects().spellPower;
+}
+
+bool Player::SharpenWeapon() {
+	if (!equipment_.GetWeapon()) return false;
+	equipment_.GetWeapon()->Sharpen();
+	return true;
+}
+
+bool Player::ImproveApparel(ApparelSlot slot) {
+	if (!equipment_.GetApparel(slot)) return false;
+	equipment_.GetApparel(slot)->Improve();
+	return true;
+}
 
 // -- Death save counter --
 int Player::GetDeathSaveCount() const { return deathSaveCount_; }
@@ -160,7 +196,7 @@ void Player::RecalcDerivedWithRelics() {
 	stats_.maxHp += relicMaxHpMod_;
 	if (stats_.maxHp < 5) stats_.maxHp = 5;   // Never relic yourself below 5 HP
 	if (currentHp_ > stats_.maxHp) currentHp_ = stats_.maxHp;
-	if (currentMana_ > stats_.maxMana) currentMana_ = stats_.maxMana;
+	if (currentMana_ > GetMaxMana()) currentMana_ = GetMaxMana();
 }
 
 void Player::GrantRelic(RelicId id) {
@@ -169,12 +205,12 @@ void Player::GrantRelic(RelicId id) {
 
 	switch (id) {
 	case RelicId::BerserkersBrand:
-		stats_.atk += 3;
+		stats_.strength += 3;
 		relicMaxHpMod_ -= 6;
 		break;
 	case RelicId::GiantsBelt:
 		relicMaxHpMod_ += 18;
-		stats_.atk = std::max(1, stats_.atk - 1);
+		stats_.strength = std::max(1, stats_.strength - 1);
 		break;
 	case RelicId::AdrenalGland:
 		stats_.speed += 1;
@@ -192,36 +228,39 @@ void Player::GrantRelic(RelicId id) {
 	if (id == RelicId::GiantsBelt) currentHp_ = std::min(currentHp_ + 18, stats_.maxHp);
 }
 
-void Player::TrainStat(int statChoice) {
-	if (!CanTrain()) return;
+bool Player::TrainStat(int statChoice) {
+	if (statChoice < 1 || statChoice > 3) return false;
 	trainingPoints_++;
 	switch (statChoice) {
-	case 1: // Health
-		rawHp_++;
-		stats_.hp = rawHp_;
-		RecalcDerivedWithRelics();
-		currentHp_ = std::min(currentHp_ + 5, stats_.maxHp); // Gain the 5 HP immediately
-		std::cout << "  You train your endurance. +5 max HP!\n";
+	case 1: // Strength
+		stats_.strength += 1;
+		std::cout << "  You practice combat drills. +1 STR!\n";
 		break;
-	case 2: // Attack
-		stats_.atk += 1;
-		std::cout << "  You practice combat drills. +1 ATK!\n";
-		break;
-	case 3: // Speed
+	case 2: // Speed
 		stats_.speed += 1;
 		std::cout << "  You work on your footwork. +1 SPD!\n";
 		break;
-	case 4: // Intelligence
+	case 3: // Intelligence
 		stats_.intelligence += 1;
 		RecalcDerivedWithRelics();
-		currentMana_ = std::min(currentMana_ + 3, stats_.maxMana);
+		currentMana_ = std::min(currentMana_ + 3, GetMaxMana());
 		std::cout << "  You meditate and expand your mind. +1 INT, +3 max Mana!\n";
 		break;
 	}
+	return true;
 }
 
 Inventory& Player::GetInventory() { return inventory_; }
 const Inventory& Player::GetInventory() const { return inventory_; }
+const EquipmentSlots& Player::GetEquipment() const { return equipment_; }
+bool Player::EquipWeapon(Weapon weapon) {
+	return equipment_.EquipWeapon(std::move(weapon));
+}
+bool Player::EquipApparel(Apparel apparel) {
+	const bool replaced = equipment_.EquipApparel(std::move(apparel));
+	currentMana_ = std::min(currentMana_, GetMaxMana());
+	return replaced;
+}
 
 bool Player::TryLearnSpell(const Spell& spell) {
 	if (stats_.intelligence >= spell.requiredIntelligence && !KnowsSpell(spell.name)) {
@@ -234,9 +273,9 @@ bool Player::TryLearnSpell(const Spell& spell) {
 
 void Player::PrintStatus() const {
 	std::cout << name_ << " [Lv." << level_ << "] - HP: " << currentHp_ << "/" << stats_.maxHp
-		<< " | Mana: " << currentMana_ << "/" << stats_.maxMana
-		<< " | ATK: " << stats_.atk
-		<< " | SPD: " << stats_.speed
+		<< " | Mana: " << currentMana_ << "/" << GetMaxMana()
+		<< " | STR: " << stats_.strength
+		<< " | SPD: " << GetSpeed()
 		<< " | INT: " << stats_.intelligence
 		<< " | XP: " << xp_ << "/" << XPForLevel(level_) << "\n";
 	if (!relics_.empty()) {
@@ -247,4 +286,5 @@ void Player::PrintStatus() const {
 		}
 		std::cout << "\n";
 	}
+	EquipmentMenu::PrintLoadout(*this);
 }

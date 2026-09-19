@@ -1,73 +1,41 @@
 // Enemy.cpp
 // ---------
 // Implementation of the Enemy class.
-// Contains the simple enemy AI (40% spell if available, 20% defend, else attack
-// with a random physical style) and the knowledge-tiered PrintStatus display.
+// Delegates decisions to the species behavior rules and owns per-specimen
+// behavior memory, Rank, status traits, and knowledge-tiered display.
 // The presentation layer describes the selected action to the player.
 
 #include "Enemy.h"
 #include "utils/RNG.h"
 #include <iostream>
+#include <algorithm>
 
 Enemy::Enemy(const std::string& name, const Stats& stats, const std::vector<Spell>& spells,
-	int xpReward, SpellElement weakness)
-	: Entity(name, stats), xpReward_(xpReward), weakness_(weakness) {
+	int xpReward, SpellElement weakness, int rank, EnemyArchetype archetype)
+	: Entity(name, stats), xpReward_(xpReward), weakness_(weakness),
+	  rank_(std::clamp(rank, 1, 50)), archetype_(archetype) {
 	for (const auto& spell : spells) {
 		LearnSpell(spell);
+	}
+	const EnemyBehaviorProfile& profile = EnemyBehavior::Profile(archetype_);
+	if (profile.regenerationBaseStacks > 0) {
+		const int stacks = profile.regenerationBaseStacks
+			+ (rank_ - 1) / std::max(1, profile.regenerationRankDivisor);
+		statuses_.ApplyRegeneration(stacks, 100000);
 	}
 }
 
 TurnAction Enemy::DecideTurn() {
 	static RNG rng;
-	TurnAction action;
+	return DecideTurn(rng);
+}
 
-	// Simple AI: if we have spells and mana, 40% chance to cast; otherwise attack
-	if (!knownSpells_.empty()) {
-		std::vector<int> usable;
-		for (size_t i = 0; i < knownSpells_.size(); ++i) {
-			if (currentMana_ >= knownSpells_[i].manaCost) {
-				usable.push_back(static_cast<int>(i));
-			}
-		}
+TurnAction Enemy::DecideTurn(RNG& rng) {
+	return EnemyBehavior::Decide(*this, behaviorState_, rng);
+}
 
-		if (!usable.empty() && rng.Chance(0.4f)) {
-			int pick = usable[rng.NextInt(0, static_cast<int>(usable.size()) - 1)];
-			action.type = ActionType::CastSpell;
-			action.spellIndex = pick;
-			return action;
-		}
-	}
-
-	// 20% chance to defend, 80% to attack
-	if (rng.Chance(0.2f)) {
-		action.type = ActionType::Defend;
-		// Pick a random defense stance.
-		int stance = rng.NextInt(0, 3);
-		switch (stance) {
-		case 0: action.defenseStance = DefenseStance::AntiSlash; break;
-		case 1: action.defenseStance = DefenseStance::AntiThrust; break;
-		case 2: action.defenseStance = DefenseStance::AntiBash; break;
-		case 3: action.defenseStance = DefenseStance::AntiMagic; break;
-		}
-	}
-	else {
-		action.type = ActionType::Attack;
-		// Pick a random attack style.
-		int style = rng.NextInt(0, 2);
-		switch (style) {
-		case 0:
-			action.attackStyle = AttackStyle::Slash;
-			break;
-		case 1:
-			action.attackStyle = AttackStyle::Thrust;
-			break;
-		case 2:
-			action.attackStyle = AttackStyle::Bash;
-			break;
-		}
-	}
-
-	return action;
+void Enemy::ObservePlayerAction(const TurnAction& action) {
+	EnemyBehavior::ObservePlayerAction(behaviorState_, action);
 }
 
 void Enemy::PrintStatus() const {
@@ -77,7 +45,7 @@ void Enemy::PrintStatus() const {
 void Enemy::PrintStatus(EnemyKnowledge knowledge) const {
 	switch (knowledge) {
 	case EnemyKnowledge::None:
-		std::cout << name_ << " - HP: ???  | ATK: ???  | SPD: ???\n";
+		std::cout << name_ << " - HP: ???  | STR: ???  | SPD: ???\n";
 		break;
 	case EnemyKnowledge::Approximate: {
 		static RNG rng;
@@ -89,18 +57,18 @@ void Enemy::PrintStatus(EnemyKnowledge knowledge) const {
 			return "~" + std::to_string(shown);
 		};
 		std::cout << name_ << " - HP: " << approx(currentHp_) << "/" << approx(stats_.maxHp)
-			<< "  | ATK: " << approx(stats_.atk)
+			<< "  | STR: " << approx(stats_.strength)
 			<< "  | SPD: " << approx(stats_.speed) << "\n";
 		break;
 	}
 	case EnemyKnowledge::Partial:
 		std::cout << name_ << " - HP: " << currentHp_ << "/" << stats_.maxHp
-			<< "  | ATK: " << stats_.atk
+			<< "  | STR: " << stats_.strength
 			<< "  | SPD: " << stats_.speed << "\n";
 		break;
 	case EnemyKnowledge::Full: {
 		std::cout << name_ << " - HP: " << currentHp_ << "/" << stats_.maxHp
-			<< "  | ATK: " << stats_.atk
+			<< "  | STR: " << stats_.strength
 			<< "  | SPD: " << stats_.speed
 			<< "  | INT: " << stats_.intelligence;
 		// Show weakness
@@ -123,3 +91,25 @@ void Enemy::PrintStatus(EnemyKnowledge knowledge) const {
 
 int Enemy::GetXPReward() const { return xpReward_; }
 SpellElement Enemy::GetWeakness() const { return weakness_; }
+int Enemy::GetRank() const { return rank_; }
+EnemyArchetype Enemy::GetArchetype() const { return archetype_; }
+
+std::optional<StatusEffect> Enemy::RollOnHitStatus(RNG& rng) const {
+	const EnemyBehaviorProfile& profile = EnemyBehavior::Profile(archetype_);
+	if (!profile.onHitStatus || !rng.Chance(static_cast<float>(
+		EnemyBehavior::OnHitStatusChance(*this)))) return std::nullopt;
+	return StatusEffect{profile.onHitStatus->type,
+		EnemyBehavior::OnHitStatusPotency(*this), 1};
+}
+
+void Enemy::SuppressRegeneration(int actions) {
+	regenerationSuppressedActions_ = std::max(regenerationSuppressedActions_, actions);
+}
+
+bool Enemy::IsRegenerationSuppressed() const {
+	return regenerationSuppressedActions_ > 0;
+}
+
+void Enemy::AdvanceRegenerationSuppression() {
+	if (regenerationSuppressedActions_ > 0) --regenerationSuppressedActions_;
+}

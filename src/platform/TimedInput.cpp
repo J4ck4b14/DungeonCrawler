@@ -8,7 +8,7 @@
 #include "WebConsole.h"
 #elif defined(_WIN32)
 #include <conio.h>
-#else
+#elif defined(__unix__) || defined(__APPLE__)
 #include <sys/select.h>
 #include <termios.h>
 #include <unistd.h>
@@ -16,13 +16,23 @@
 
 namespace TimedInput {
 
+bool IsRealtimeSupported() {
+#if defined(__EMSCRIPTEN__) || defined(_WIN32) || defined(__unix__) || defined(__APPLE__)
+	return true;
+#else
+	return false;
+#endif
+}
+
 void Flush() {
 #if defined(__EMSCRIPTEN__)
 	while (WaitForKey(0) != 0) {}
 #elif defined(_WIN32)
 	while (_kbhit()) (void)_getch();
-#else
+#elif defined(__unix__) || defined(__APPLE__)
 	tcflush(STDIN_FILENO, TCIFLUSH);
+#else
+	// No buffered-key API on this target.
 #endif
 }
 
@@ -38,7 +48,7 @@ int WaitForKey(int timeoutMs) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(2));
 	} while (std::chrono::steady_clock::now() < deadline);
 	return 0;
-#else
+#elif defined(__unix__) || defined(__APPLE__)
 	termios previous{};
 	const bool hasTerminal = tcgetattr(STDIN_FILENO, &previous) == 0;
 	if (hasTerminal) {
@@ -57,6 +67,8 @@ int WaitForKey(int timeoutMs) {
 	const int result = ready > 0 && read(STDIN_FILENO, &key, 1) == 1 ? key : 0;
 	if (hasTerminal) tcsetattr(STDIN_FILENO, TCSANOW, &previous);
 	return result;
+#else
+	return 0;
 #endif
 }
 

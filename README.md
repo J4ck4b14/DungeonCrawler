@@ -7,20 +7,28 @@ A terminal roguelike written from scratch in C++20. Runs natively — and in you
 <img width="397" height="154" alt="Screenshot 2026-07-05 173819" src="https://github.com/user-attachments/assets/77c28450-c48d-4010-a8af-5fb391ce3cc9" />
 
 ## The game
+
+Characters are built from four core stats: **Health, Strength, Speed, and Intelligence**.
  
 You descend a procedurally generated dungeon. There is no final boss and no bottom floor — enemies grow stronger faster than you do, and eventually the dungeon forms a wall your build cannot climb. **Victory is escaping alive.** Every extra floor you descend is greed.
  
-- **Reactive combat** — commit to Defend, track falling WASD cues, and catch them at the guard line. Complete the sequence to block; perfect every cue to take no damage and counterattack.
+- **Reactive combat** — commit to Defend, read species-specific four-lane A/W/S/D patterns, and catch cues at the guard line. Complete the sequence to block; perfect every cue to take no damage and counterattack.
 - **Enemy groups** — deeper floors can surround you with two or three independently acting foes. The combat panel shows their stable target labels, intents, and initiative order.
-- **Legacy progression** — every completed run awards persistent Legacy XP. New ranks unlock additional relics for future descents while each hero's combat level remains run-specific.
-- **Tiered relics** — floor rewards draw from unlocked, depth-appropriate common, uncommon, and rare pools. Relics last for the current run; catalogue unlocks persist in the profile.
-- **Perception** — survey rooms, spot hidden passages, break walls (not the bedrock, though — we learned that the hard way).
-- **Bestiary** — inspect enemies to learn their stats and weaknesses across runs.
+- **Equipment-driven builds** — weapons have visible Weapon Rank (WR), distinct STR/SPD/INT scaling, permanent sharpening, and up to two visible ranked enchantments. Apparel occupies five fixed slots; replacing gear is a real choice, not backpack accumulation. Loot rarity exists only behind the scenes so the game presents what an item does, not a color label.
+- **Rest-site choices** — each site is spent on one recovery, permanent weapon/apparel improvement, or uncapped STR/SPD/INT training decision.
+- **Statuses and spell identity** — Burn, Poison, Bleed, Stun, Slow, and Regeneration use shared lifecycle rules. Enemy spellbooks and casting behavior remain species-specific.
+- **Legacy 0–50** — every completed run awards persistent Legacy XP. Six relics are available at Rank 0, then one catalogue relic unlocks at every five-rank milestone through Rank 50. Heroes still begin each descent with run-specific combat progression.
+- **Tiered relic offers** — floor rewards draw from the profile's unlocked, depth-appropriate pool. Relics last for the current run; catalogue unlocks persist.
+- **Systemic dungeon topology** — floors begin as sparse connected graphs with branches, dead ends, chokepoints, junctions, and selective loops. Finding the stairs early is a valid reason to leave; ordinary movement and map coverage award no XP.
+- **Perception and breaching** — deliberate surveys can mark suspicious masonry without revealing hidden geometry. High INT gains clues; high STR can force a genuinely generated route, but striking solid masonry can never create a room.
+- **Persistent Bestiary** — encounters, victories, observed spells/statuses, weaknesses, behavior notes, and the best knowledge tier survive between runs. Knowledge helps interpret tells without making every future action certain.
 - **Death saves** — at death's door, a heartbeat QTE gives you one last chance. Match the rhythm or flatline.
 - **Permadeath.** Obviously.
 ### Design notes
  
-Enemy stats scale **exponentially** per floor (compounding 10%) while XP rewards scale linearly, so player power mathematically cannot keep pace forever. This architecture pass intentionally preserves those existing values; balancing is a separate phase.
+Each enemy specimen has a **Rank from 1–50** driven by dungeon depth, species threat, and small specimen variance—not player power. Per-species growth keeps Giants slow and crushing, Werewolves fast and burst-heavy, and magical enemies focused on Intelligence and mana. XP grows sublinearly with Rank to reward danger without creating runaway leveling.
+
+Equipment names show their useful structure directly, for example `Sword IV — Fire-form II — Snake-Tongue III`, followed by the resulting damage. Internal Overall Rank and Common/Rare/Epic/Legendary bands are generation tools and are intentionally absent from the normal player UI.
  
 ## Tech
  
@@ -48,6 +56,8 @@ ctest --preset linux-debug
 ```
  
 Requires CMake 3.21+ and a C++20 compiler.
+
+`DungeonCrawlerValidation` is also built when testing is enabled. It emits seeded loot distributions, aggregate topology metrics, and several debug-only truth maps. Internal categories and probabilities printed there are validation data, not player-facing information.
  
 ### Web (itch.io)
  
@@ -60,12 +70,15 @@ src/
 ├── audio/      Optional scene music playback
 ├── core/       Game loop, relics, stats, dev mode
 ├── combat/     Turn-based combat and testable defense timing rules
-├── dungeon/    Procedural floors, rooms, perception
+├── dungeon/    Procedural floors, rooms, perception, rest-site rules
+├── equipment/  Weapon, enchantment, apparel, and equipment-slot models
 ├── entities/   Player, enemies, definitions, factory
-├── items/      Inventory
+├── items/      Consumables and their inventory
+├── loot/       Seedable equipment generation and Legacy-weighted rank rolls
 ├── platform/   Profile storage, timed input, native/web terminal support
 ├── presentation/ Terminal menus, panels, and defense animation
 ├── progression/ Persistent Legacy profile and run rewards
+├── status/     Shared status-effect state and lifecycle rules
 └── utils/      Console helpers, RNG
 tests/          Focused gameplay-rule regression tests
 ```
@@ -75,7 +88,19 @@ tests/          Focused gameplay-rule regression tests
 Native builds store the Legacy profile in the user's platform data directory
 (`%LOCALAPPDATA%/DungeonCrawler/profile.dat` on Windows). Browser builds use
 local storage. The versioned text format uses stable relic keys so catalogue
-changes do not depend on enum ordering.
+changes do not depend on enum ordering. Version 2 adds persistent Bestiary
+records and the Legacy 0–50 curve; supported version-1 profiles are migrated
+while preserving their old rank and fractional progress where possible.
+
+## Developer tuning points
+
+The deliberately asymmetric systems are centralized rather than flattened:
+weapon scaling and enchantment behavior live under `equipment/`, loot pull and
+category weights under `loot/`, armor mitigation in equipment rules, species
+Rank growth and XP in enemy definitions/factory, spell behavior in spell rules,
+status potency in status rules, reactive-defense windows and SPD assistance in
+defense rules, topology density/loops/walls in dungeon topology, and Legacy XP
+in the player profile. These are the intended balance levers for future passes.
  
 ---
  

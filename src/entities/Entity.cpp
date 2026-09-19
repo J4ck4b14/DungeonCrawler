@@ -16,7 +16,7 @@ Entity::Entity(const std::string& name, const Stats& stats)
 const std::string& Entity::GetName() const { return name_; }
 int Entity::GetHP() const { return currentHp_; }
 int Entity::GetMaxHP() const { return stats_.maxHp; }
-int Entity::GetATK() const { return stats_.atk; }
+int Entity::GetStrength() const { return stats_.strength; }
 int Entity::GetSpeed() const { return stats_.speed; }
 int Entity::GetIntelligence() const { return stats_.intelligence; }
 int Entity::GetMana() const { return currentMana_; }
@@ -25,6 +25,8 @@ bool Entity::IsAlive() const { return currentHp_ > 0; }
 bool Entity::IsDefending() const { return defending_; }
 DefenseStance Entity::GetDefenseStance() const { return defenseStance_; }
 const std::vector<Spell>& Entity::GetKnownSpells() const { return knownSpells_; }
+StatusContainer& Entity::GetStatuses() { return statuses_; }
+const StatusContainer& Entity::GetStatuses() const { return statuses_; }
 
 void Entity::ReceiveDamage(int dmg) {
 	if (defending_) {
@@ -34,7 +36,7 @@ void Entity::ReceiveDamage(int dmg) {
 }
 
 void Entity::Heal(int amount) {
-	currentHp_ = std::min(stats_.maxHp, currentHp_ + amount);
+	currentHp_ = std::min(GetMaxHP(), currentHp_ + amount);
 }
 
 void Entity::UseMana(int amount) {
@@ -42,7 +44,7 @@ void Entity::UseMana(int amount) {
 }
 
 void Entity::RestoreMana(int amount) {
-	currentMana_ = std::min(stats_.maxMana, currentMana_ + amount);
+	currentMana_ = std::min(GetMaxMana(), currentMana_ + amount);
 }
 
 void Entity::SetDefending(bool defending) {
@@ -66,31 +68,33 @@ bool Entity::KnowsSpell(const std::string& name) const {
 	return false;
 }
 
+StatusTurnResult Entity::ProcessStatusTurn(bool regenerationSuppressed) {
+	StatusTurnResult result = statuses_.ProcessTurnStart(regenerationSuppressed);
+	result.poisonDamage = std::min(currentHp_, result.poisonDamage);
+	currentHp_ -= result.poisonDamage;
+	result.burnDamage = std::min(currentHp_, result.burnDamage);
+	currentHp_ -= result.burnDamage;
+	result.bleedDamage = std::min(currentHp_, result.bleedDamage);
+	currentHp_ -= result.bleedDamage;
+	if (currentHp_ > 0) {
+		result.regenerationHealing = std::min(
+			stats_.maxHp - currentHp_, result.regenerationHealing);
+		currentHp_ += result.regenerationHealing;
+	}
+	else {
+		result.regenerationHealing = 0;
+	}
+	return result;
+}
+
 int Entity::ActionsPerRound(int otherSpeed) const {
 	// You get a second action only when your speed is at least DOUBLE the
 	// opponent's, and never more than 2 actions. Speed stays valuable
 	// (turn order + the double-up threshold) without snowballing into
 	// machine-gun rounds.
 	if (otherSpeed <= 0) otherSpeed = 1;
-	return (stats_.speed >= otherSpeed * 2) ? 2 : 1;
+	return (GetSpeed() >= otherSpeed * 2) ? 2 : 1;
 }
-
-void Entity::ApplyAttackBuff(int bonus, int hits, bool magical) {
-	attackBuff_.bonusDamage = bonus;
-	attackBuff_.remainingHits = hits;
-	attackBuff_.isMagical = magical;
-}
-
-int Entity::ConsumeAttackBuff(bool magical) {
-	// Only consume if the buff type matches the attack type
-	if (attackBuff_.remainingHits > 0 && attackBuff_.isMagical == magical) {
-		attackBuff_.remainingHits--;
-		return attackBuff_.bonusDamage;
-	}
-	return 0;
-}
-
-const AttackBuff& Entity::GetAttackBuff() const { return attackBuff_; }
 
 void Entity::ApplyPowerBuff(int percentBonus, int hits) {
 	percentBonus = std::max(0, percentBonus);

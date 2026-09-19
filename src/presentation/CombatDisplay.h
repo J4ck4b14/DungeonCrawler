@@ -16,8 +16,10 @@ void PrintRoundHeader(int round, const Player& player,
 	const std::vector<bool>& weaknessKnown,
 	const std::vector<int>& initiativeOrder,
 	const std::vector<TurnAction>& plannedActions,
-	const std::vector<bool>& plannedIntentPending);
+	const std::vector<bool>& plannedIntentPending,
+	const std::vector<bool>& plannedCommitments);
 void PrintEnemyIntent(int enemyIndex, const Enemy& enemy, const TurnAction& action,
-	EnemyKnowledge knowledge, int playerIntelligence, bool followUp = false);
+	EnemyKnowledge knowledge, int playerIntelligence, bool committed,
+	bool followUp = false);
 
 } // namespace CombatDisplay

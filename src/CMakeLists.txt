@@ -3,20 +3,30 @@
 set(DUNGEON_LIBRARY_SOURCES
     audio/MusicSystem.cpp
     combat/CombatSystem.cpp
+	combat/DeathSaveRules.cpp
+    combat/DefensePatterns.cpp
     combat/DefenseRules.cpp
     combat/EncounterRules.cpp
+    combat/SpellRules.cpp
+    core/Bestiary.cpp
     core/DevMode.cpp
     core/Game.cpp
     core/RelicRules.cpp
     core/Relic.cpp
     dungeon/Dungeon.cpp
+    dungeon/DungeonTopology.cpp
+    dungeon/BreachRules.cpp
     dungeon/DungeonRules.cpp
     dungeon/Perception.cpp
+    dungeon/RestSite.cpp
+    equipment/Equipment.cpp
     entities/Enemy.cpp
+    entities/EnemyBehavior.cpp
     entities/EnemyDefinitions.cpp
     entities/EnemyFactory.cpp
     entities/Entity.cpp
     entities/Player.cpp
+    loot/LootGenerator.cpp
     platform/WebConsole.cpp
     platform/ProfileStorage.cpp
     platform/TimedInput.cpp
@@ -28,6 +38,8 @@ set(DUNGEON_LIBRARY_SOURCES
     presentation/ExplorationDisplay.cpp
     presentation/ProfileDisplay.cpp
     presentation/EnemyIntent.cpp
+    presentation/EquipmentMenu.cpp
+    status/StatusEffect.cpp
     utils/RNG.cpp
     progression/PlayerProfile.cpp
 )
@@ -49,7 +61,7 @@ endif()
 
 function(configure_dungeon_target target)
     if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /permissive-)
+        target_compile_options(${target} PRIVATE /W4 /permissive- /EHsc)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     endif()
@@ -73,4 +85,8 @@ if(BUILD_TESTING)
     target_link_libraries(DungeonCrawlerTests PRIVATE DungeonGame)
     configure_dungeon_target(DungeonCrawlerTests)
     add_test(NAME DungeonCrawlerRules COMMAND DungeonCrawlerTests)
+
+	add_executable(DungeonCrawlerValidation ../tests/ValidationReport.cpp)
+	target_link_libraries(DungeonCrawlerValidation PRIVATE DungeonGame)
+	configure_dungeon_target(DungeonCrawlerValidation)
 endif()

@@ -7,12 +7,22 @@
 
 namespace ProfileDisplay {
 
+namespace {
+void PrintRankProgress(const PlayerProfile& profile, const char* prefix) {
+	std::cout << prefix << profile.GetLegacyRank();
+	if (profile.GetLegacyRank() >= PlayerProfile::MaximumLegacyRank) {
+		std::cout << "  [MAX RANK]\n";
+		return;
+	}
+	std::cout << "  " << DisplayUtils::MakeMeter(profile.GetXPIntoRank(),
+		profile.GetXPForNextRank(), 18) << " " << profile.GetXPIntoRank()
+		<< "/" << profile.GetXPForNextRank() << "\n";
+}
+} // namespace
+
 void PrintSummary(const PlayerProfile& profile) {
 	std::cout << "+-- LEGACY -----------------------------------------------------------+\n";
-	std::cout << "| Rank " << profile.GetLegacyRank()
-		<< "  XP " << DisplayUtils::MakeMeter(profile.GetXPIntoRank(),
-			profile.GetXPForNextRank(), 18)
-		<< " " << profile.GetXPIntoRank() << "/" << profile.GetXPForNextRank() << "\n";
+	PrintRankProgress(profile, "| Rank ");
 	std::cout << "| Runs " << profile.GetRunCount()
 		<< "  Highest floor " << profile.GetHighestFloor()
 		<< "  Lifetime kills " << profile.GetTotalKills()
@@ -45,10 +55,7 @@ void PrintSummary(const PlayerProfile& profile) {
 void PrintRunReward(const PlayerProfile& profile, const LegacyReward& reward) {
 	std::cout << "\n+-- LEGACY PROGRESSION -----------------------------------------------+\n";
 	std::cout << "| Run XP: +" << reward.xpEarned << "\n";
-	std::cout << "| Rank " << profile.GetLegacyRank()
-		<< "  " << DisplayUtils::MakeMeter(profile.GetXPIntoRank(),
-			profile.GetXPForNextRank(), 18)
-		<< " " << profile.GetXPIntoRank() << "/" << profile.GetXPForNextRank() << "\n";
+	PrintRankProgress(profile, "| Rank ");
 	if (reward.newRank > reward.previousRank) {
 		std::cout << "| RANK UP: " << reward.previousRank << " -> " << reward.newRank << "\n";
 	}

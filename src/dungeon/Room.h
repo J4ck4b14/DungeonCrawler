@@ -66,8 +66,25 @@ enum class WallMaterial {
 	Strange   // exotic deep-materia (often vulnerable only to specific magic)
 };
 
+// Geometry and player knowledge are deliberately separate. A wall may border
+// generated space without the player knowing that space exists.
+enum class WallType {
+	Solid,
+	AdjacentUnconnected,
+	Concealed
+};
+
+enum class WallKnowledge {
+	Unknown,
+	Suspected,
+	Revealed
+};
+
 struct HiddenWall {
 	bool exists = false;
+	bool breakable = false;
+	WallType type = WallType::Solid;
+	WallKnowledge knowledge = WallKnowledge::Unknown;
 	int toughness = 0;
 	WallMaterial material = WallMaterial::None;
 	SpellElement weakness = SpellElement::Arcane;
@@ -76,6 +93,8 @@ struct HiddenWall {
 struct Room {
 	int x = 0;
 	int y = 0;
+	bool exists = false;
+	bool mapRevealed = false;
 
 	RoomContent content = RoomContent::Empty;
 	bool visited = false;
@@ -98,8 +117,21 @@ struct Room {
 	bool HasHiddenExit(Direction d) const { return GetHiddenWall(d).exists; }
 	int GetHiddenToughness(Direction d) const { return GetHiddenWall(d).toughness; }
 	void SetHiddenWall(Direction d, int toughness, WallMaterial material,
-		SpellElement weakness) {
-		hiddenWalls[static_cast<int>(d)] = {true, toughness, material, weakness};
+		SpellElement weakness, WallType type = WallType::Concealed,
+		bool breakable = true) {
+		hiddenWalls[static_cast<int>(d)] = {
+			true, breakable, type, WallKnowledge::Unknown,
+			toughness, material, weakness};
+	}
+	bool IsWallBreakable(Direction d) const {
+		const HiddenWall& wall = GetHiddenWall(d);
+		return wall.exists && wall.breakable && wall.toughness > 0;
+	}
+	bool IsWallSuspected(Direction d) const {
+		return GetHiddenWall(d).knowledge == WallKnowledge::Suspected;
+	}
+	void SetWallKnowledge(Direction d, WallKnowledge knowledge) {
+		hiddenWalls[static_cast<int>(d)].knowledge = knowledge;
 	}
 	void SetHiddenToughness(Direction d, int toughness) {
 		hiddenWalls[static_cast<int>(d)].toughness = toughness;

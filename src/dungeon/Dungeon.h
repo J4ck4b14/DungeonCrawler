@@ -15,7 +15,7 @@ class PlayerProfile;
 
 class Dungeon {
 public:
-	explicit Dungeon(const PlayerProfile* profile = nullptr);
+	explicit Dungeon(PlayerProfile* profile = nullptr);
 
 	FloorResult RunFloor(Player& player);
 
@@ -41,8 +41,11 @@ private:
 
 	// Persistent stats across the whole run
 	GameStats gameStats_;
-	Bestiary bestiary_;
-	const PlayerProfile* profile_ = nullptr;
+	Bestiary fallbackBestiary_;
+	PlayerProfile* profile_ = nullptr;
+
+	Bestiary& ActiveBestiary();
+	const Bestiary& ActiveBestiary() const;
 
 	// Floor generation
 	void GenerateFloor();
@@ -62,6 +65,4 @@ private:
 	// Map display
 	void PrintMap() const;
 
-	// XP for exploration
-	void AwardExplorationXP(Player& player);
 };

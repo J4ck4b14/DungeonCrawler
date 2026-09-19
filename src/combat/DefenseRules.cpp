@@ -1,10 +1,12 @@
 #include "DefenseRules.h"
 
+#include "DefensePatterns.h"
 #include "Spell.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <map>
 
 namespace {
 
@@ -13,10 +15,15 @@ char NormalizeKey(char key) {
 }
 
 std::string SpeedName(int fallDurationMs) {
-	if (fallDurationMs <= 750) return "very fast";
-	if (fallDurationMs <= 950) return "fast";
-	if (fallDurationMs <= 1150) return "measured";
+	if (fallDurationMs <= 760) return "very fast";
+	if (fallDurationMs <= 980) return "fast";
+	if (fallDurationMs <= 1280) return "measured";
 	return "slow";
+}
+
+int RequiredNoteCount(const DefenseCue& cue) {
+	return static_cast<int>(std::count_if(cue.notes.begin(), cue.notes.end(),
+		[](const DefenseNote& note) { return !note.decoy; }));
 }
 
 } // namespace
@@ -43,6 +50,57 @@ DefenseCueGrade GradeCue(char expectedKey, char pressedKey, int timingErrorMs,
 	return GradeTiming(timingErrorMs, blockRadiusMs, perfectRadiusMs);
 }
 
+std::vector<DefenseCueGrade> GradeCueInputs(const DefenseCue& cue,
+	const std::vector<DefenseInput>& inputs, int blockRadiusMs,
+	int perfectRadiusMs, int chordGraceMs) {
+	std::vector<DefenseCueGrade> grades;
+	grades.reserve(static_cast<std::size_t>(RequiredNoteCount(cue)));
+	std::vector<bool> used(inputs.size(), false);
+	std::map<int, int> chordAnchorByOffset;
+
+	for (const DefenseNote& note : cue.notes) {
+		if (note.decoy) continue;
+		int inputIndex = -1;
+		for (std::size_t i = 0; i < inputs.size(); ++i) {
+			if (!used[i] && NormalizeKey(inputs[i].key) == NormalizeKey(note.key)) {
+				inputIndex = static_cast<int>(i);
+				break;
+			}
+		}
+		if (inputIndex < 0) {
+			grades.push_back(DefenseCueGrade::Miss);
+			continue;
+		}
+
+		used[static_cast<std::size_t>(inputIndex)] = true;
+		const int pressedAt = inputs[static_cast<std::size_t>(inputIndex)].pressedAtMs;
+		int effectivePress = pressedAt;
+		const int sameTimeNotes = static_cast<int>(std::count_if(
+			cue.notes.begin(), cue.notes.end(), [&](const DefenseNote& candidate) {
+				return !candidate.decoy
+					&& candidate.arrivalOffsetMs == note.arrivalOffsetMs;
+			}));
+		if (sameTimeNotes > 1) {
+			auto [anchor, inserted] = chordAnchorByOffset.emplace(
+				note.arrivalOffsetMs, pressedAt);
+			if (!inserted && std::abs(pressedAt - anchor->second)
+				<= std::max(0, chordGraceMs)) {
+				effectivePress = anchor->second;
+			}
+		}
+
+		const int arrival = cue.fallDurationMs + note.arrivalOffsetMs;
+		grades.push_back(GradeTiming(effectivePress - arrival,
+			blockRadiusMs, perfectRadiusMs));
+	}
+
+	if (std::any_of(used.begin(), used.end(), [](bool matched) { return !matched; })
+		&& !grades.empty()) {
+		grades.front() = DefenseCueGrade::Miss;
+	}
+	return grades;
+}
+
 DefenseResult ResolveSequence(const std::vector<DefenseCueGrade>& grades) {
 	if (grades.empty()) return DefenseResult::GuardBreak;
 	bool allPerfect = true;
@@ -63,78 +121,82 @@ int DamageAfterDefense(int incomingDamage, DefenseResult result) {
 	return incomingDamage;
 }
 
-int CueCount(const TurnAction& action, const Spell* spell) {
-	if (action.type == ActionType::CastSpell) {
-		return std::clamp(2 + (spell ? spell->manaCost / 3 : 0), 2, 4);
+int SpeedBlockBonusMs(int playerSpeed) {
+	playerSpeed = std::max(0, playerSpeed);
+	return playerSpeed * DefenseTuning::MaximumSpeedBlockBonusMs
+		/ (playerSpeed + 12);
+}
+
+int ComplexityTier(int enemyRank) {
+	enemyRank = std::clamp(enemyRank, 1, 50);
+	if (enemyRank >= 40) return 3;
+	if (enemyRank >= 25) return 2;
+	if (enemyRank >= 10) return 1;
+	return 0;
+}
+
+bool IsValidLane(char key) {
+	const char normalized = NormalizeKey(key);
+	return normalized == 'A' || normalized == 'W'
+		|| normalized == 'S' || normalized == 'D';
+}
+
+bool IsValidChallenge(const DefenseChallenge& challenge) {
+	if (challenge.cues.empty() || challenge.blockRadiusMs < challenge.perfectRadiusMs
+		|| challenge.perfectRadiusMs < 0 || challenge.chordGraceMs < 0) return false;
+	for (const DefenseCue& cue : challenge.cues) {
+		if (cue.notes.empty() || cue.fallDurationMs <= 0 || cue.gapAfterMs < 0
+			|| RequiredNoteCount(cue) == 0) return false;
+		for (const DefenseNote& note : cue.notes) {
+			if (!note.decoy && !IsValidLane(note.key)) return false;
+			if (note.arrivalOffsetMs < 0 || note.lanePath.empty()) return false;
+			for (char lane : note.lanePath) if (!IsValidLane(lane)) return false;
+			if (!note.decoy
+				&& NormalizeKey(note.lanePath.back()) != NormalizeKey(note.key)) return false;
+		}
 	}
-	if (action.type != ActionType::Attack) return 1;
-	switch (action.attackStyle) {
-	case AttackStyle::Slash: return 2;
-	case AttackStyle::Thrust: return 1;
-	case AttackStyle::Bash: return 2;
-	}
-	return 1;
+	return true;
 }
 
 DefenseChallenge BuildChallenge(const TurnAction& action, const Spell* spell,
-	int enemySpeed, int enemyAttack, const std::vector<char>& keys) {
-	DefenseChallenge challenge;
-	const int speed = std::max(1, enemySpeed);
-	const int powerPressure = std::clamp(std::max(0, enemyAttack) / 5, 0, 8);
-	const int difficulty = speed + powerPressure;
-	int baseFall = std::clamp(1480 - difficulty * 60, 560, 1400);
-	int gap = std::clamp(650 - difficulty * 28, 210, 620);
-	challenge.blockRadiusMs = std::clamp(285 - difficulty * 10, 125, 260);
-	challenge.perfectRadiusMs = std::clamp(105 - difficulty * 5, 42, 90);
+	EnemyArchetype archetype, int enemyRank, int enemySpeed,
+	int enemyStrength, int playerSpeed, int patternVariant) {
+	DefenseChallenge challenge = DefensePatterns::Build(
+		archetype, enemyRank, action, spell, patternVariant);
+	enemyRank = std::clamp(enemyRank, 1, 50);
+	const int speedPressure = std::min(180, std::max(0, enemySpeed - 1) * 18);
+	const int rankPressure = std::min(140, (enemyRank - 1) * 3);
+	const int strengthPressure = std::min(35, std::max(0, enemyStrength) / 4);
 
-	if (action.type == ActionType::CastSpell) {
-		challenge.attackLabel = spell ? spell->name : "Hostile spell";
-		baseFall = std::max(560, baseFall - 80);
-	}
-	else if (action.type == ActionType::Attack) {
-		switch (action.attackStyle) {
-		case AttackStyle::Slash:
-			challenge.attackLabel = "Sweeping slash";
-			break;
-		case AttackStyle::Thrust:
-			challenge.attackLabel = "Driving thrust";
-			baseFall = std::max(520, baseFall - 180);
-			break;
-		case AttackStyle::Bash:
-			challenge.attackLabel = "Crushing bash";
-			baseFall = std::min(1500, baseFall + 130);
-			gap += 100;
-			break;
-		}
-	}
-	else {
-		challenge.attackLabel = "Incoming attack";
-	}
+	challenge.blockRadiusMs = std::clamp(
+		265 - speedPressure / 3 - rankPressure / 3 - strengthPressure
+			+ SpeedBlockBonusMs(playerSpeed),
+		DefenseTuning::MinimumBlockRadiusMs,
+		DefenseTuning::MaximumBlockRadiusMs);
+	challenge.perfectRadiusMs = std::clamp(
+		78 - speedPressure / 18 - rankPressure / 20,
+		DefenseTuning::MinimumPerfectRadiusMs, 78);
+	challenge.chordGraceMs = DefenseTuning::ChordGraceMs;
 
-	const int count = CueCount(action, spell);
-	challenge.cues.reserve(static_cast<size_t>(count));
-	for (int i = 0; i < count; ++i) {
-		DefenseCue cue;
-		cue.key = i < static_cast<int>(keys.size()) ? NormalizeKey(keys[i]) : 'W';
-		cue.fallDurationMs = baseFall;
-		cue.gapAfterMs = gap;
-		if (action.type == ActionType::Attack && action.attackStyle == AttackStyle::Bash
-			&& i == count - 1) {
-			cue.fallDurationMs = std::max(520, baseFall - 220);
-		}
-		challenge.cues.push_back(cue);
+	for (DefenseCue& cue : challenge.cues) {
+		cue.fallDurationMs = std::clamp(
+			cue.fallDurationMs - speedPressure - rankPressure, 620, 1900);
 	}
 	return challenge;
 }
 
-std::string DescribeChallenge(const TurnAction& action, const Spell* spell,
-	int enemySpeed, int enemyAttack) {
-	const DefenseChallenge challenge = BuildChallenge(
-		action, spell, enemySpeed, enemyAttack, {});
-	const int count = static_cast<int>(challenge.cues.size());
-	const int fall = challenge.cues.empty() ? 1000 : challenge.cues.front().fallDurationMs;
-	return std::to_string(count) + (count == 1 ? " cue, " : " cues, ")
-		+ SpeedName(fall);
+std::string DescribeChallenge(const DefenseChallenge& challenge) {
+	int noteCount = 0;
+	bool hasChord = false;
+	for (const DefenseCue& cue : challenge.cues) {
+		const int required = RequiredNoteCount(cue);
+		noteCount += required;
+		hasChord = hasChord || required > 1;
+	}
+	const int fall = challenge.cues.empty() ? 1000
+		: challenge.cues.front().fallDurationMs;
+	return std::to_string(noteCount) + (noteCount == 1 ? " input, " : " inputs, ")
+		+ SpeedName(fall) + (hasChord ? ", includes a chord" : "");
 }
 
 } // namespace DefenseRules

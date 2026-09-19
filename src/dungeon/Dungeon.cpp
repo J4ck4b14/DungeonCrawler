@@ -1,5 +1,7 @@
 #include "Dungeon.h"
 #include "DungeonRules.h"
+#include "DungeonTopology.h"
+#include "BreachRules.h"
 #include "Perception.h"
 #include "entities/EnemyFactory.h"
 #include "combat/CombatSystem.h"
@@ -16,24 +18,33 @@
 #include "core/RelicRules.h"
 #include "progression/PlayerProfile.h"
 #include "combat/Spell.h"
+#include "combat/SpellRules.h"
+#include "dungeon/RestSite.h"
+#include "loot/LootGenerator.h"
+#include "presentation/EquipmentMenu.h"
 #include "Room.h"
 #include <iostream>
 #include <limits>
 #include <algorithm>
 
-Dungeon::Dungeon(const PlayerProfile* profile)
+Dungeon::Dungeon(PlayerProfile* profile)
 	: currentLevel_(1), gridSize_(0), playerX_(0), playerY_(0), profile_(profile) {}
 
 int Dungeon::GetCurrentLevel() const { return currentLevel_; }
 const GameStats& Dungeon::GetStats() const { return gameStats_; }
-const Bestiary& Dungeon::GetBestiary() const { return bestiary_; }
+Bestiary& Dungeon::ActiveBestiary() {
+	return profile_ ? profile_->GetBestiary() : fallbackBestiary_;
+}
+const Bestiary& Dungeon::ActiveBestiary() const {
+	return profile_ ? profile_->GetBestiary() : fallbackBestiary_;
+}
+const Bestiary& Dungeon::GetBestiary() const { return ActiveBestiary(); }
 
 RoomContent Dungeon::GenerateRoomContent(bool isStart, bool isStaircase) {
 	if (isStart) return RoomContent::Empty;
 	if (isStaircase) return RoomContent::Staircase;
 
 	static RNG rng;
-	int roll = rng.NextInt(1, 100);
 
 	float enemyScale = 1.0f;
 	float trapMul = 1.0f;
@@ -44,297 +55,46 @@ RoomContent Dungeon::GenerateRoomContent(bool isStart, bool isStaircase) {
 
 	const RoomContentWeights weights = DungeonRules::CalculateRoomContentWeights(
 		currentLevel_, enemyScale, trapMul);
-
-	if (roll <= weights.combat) return RoomContent::Combat;
-	roll -= weights.combat;
-	if (roll <= weights.chest) return RoomContent::Chest;
-	roll -= weights.chest;
-	if (roll <= weights.trap) return RoomContent::Trap;
-	roll -= weights.trap;
-	if (roll <= weights.rest) return RoomContent::Rest;
-	return RoomContent::Empty;
+	return DungeonRules::RollRoomContent(weights, rng);
 }
 
 void Dungeon::GenerateFloor() {
-	static RNG rng;
-
-	gridSize_ = 4 + (currentLevel_ - 1) / 3;
-	if (gridSize_ > 8) gridSize_ = 8;
-
-	grid_.clear();
-	grid_.resize(gridSize_, std::vector<Room>(gridSize_));
-
-	int startEdge = rng.NextInt(0, 3);
-	switch (startEdge) {
-	case 0: playerX_ = rng.NextInt(0, gridSize_ - 1); playerY_ = 0; break;
-	case 1: playerX_ = gridSize_ - 1; playerY_ = rng.NextInt(0, gridSize_ - 1); break;
-	case 2: playerX_ = rng.NextInt(0, gridSize_ - 1); playerY_ = gridSize_ - 1; break;
-	case 3: playerX_ = 0; playerY_ = rng.NextInt(0, gridSize_ - 1); break;
-	}
-
-	int stairX, stairY;
-	do {
-		stairX = rng.NextInt(0, gridSize_ - 1);
-		stairY = rng.NextInt(0, gridSize_ - 1);
-	} while (std::abs(stairX - playerX_) + std::abs(stairY - playerY_) < gridSize_);
-
+	static RNG topologyRng;
+	GeneratedFloorTopology topology = DungeonTopology::Generate(currentLevel_, topologyRng);
+	gridSize_ = topology.size;
+	playerX_ = topology.entranceX;
+	playerY_ = topology.entranceY;
+	grid_ = std::move(topology.grid);
 	for (int y = 0; y < gridSize_; ++y) {
 		for (int x = 0; x < gridSize_; ++x) {
 			Room& room = grid_[y][x];
-			room.x = x;
-			room.y = y;
-			bool isStart = (x == playerX_ && y == playerY_);
-			bool isStair = (x == stairX && y == stairY);
-			room.content = GenerateRoomContent(isStart, isStair);
+			if (!room.exists) continue;
+			const bool isStart = x == playerX_ && y == playerY_;
+			const bool isStairs = x == topology.stairsX && y == topology.stairsY;
+			room.content = GenerateRoomContent(isStart, isStairs);
 		}
 	}
-
-	// Guaranteed path from start to staircase
-	{
-		int cx = playerX_, cy = playerY_;
-		while (cx != stairX || cy != stairY) {
-			Direction dir;
-			if (cx != stairX && cy != stairY) {
-				if (rng.Chance(0.5f))
-					dir = (stairX > cx) ? Direction::East : Direction::West;
-				else
-					dir = (stairY > cy) ? Direction::South : Direction::North;
-			}
-			else if (cx != stairX)
-				dir = (stairX > cx) ? Direction::East : Direction::West;
-			else
-				dir = (stairY > cy) ? Direction::South : Direction::North;
-
-			grid_[cy][cx].SetExit(dir, true);
-			switch (dir) {
-			case Direction::North: cy--; break;
-			case Direction::South: cy++; break;
-			case Direction::East:  cx++; break;
-			case Direction::West:  cx--; break;
-			}
-			grid_[cy][cx].SetExit(OppositeDirection(dir), true);
-		}
-	}
-
-	// Random extra connections
-	for (int y = 0; y < gridSize_; ++y) {
-		for (int x = 0; x < gridSize_; ++x) {
-			if (x + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::East)) {
-				if (rng.Chance(0.35f)) {
-					grid_[y][x].SetExit(Direction::East, true);
-					grid_[y][x + 1].SetExit(Direction::West, true);
-				}
-			}
-			if (y + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::South)) {
-				if (rng.Chance(0.35f)) {
-					grid_[y][x].SetExit(Direction::South, true);
-					grid_[y + 1][x].SetExit(Direction::North, true);
-				}
-			}
-		}
-	}
-
-	// Random hidden / breakable connections (behind a brittle wall)
-	for (int y = 0; y < gridSize_; ++y) {
-		for (int x = 0; x < gridSize_; ++x) {
-			// East
-			if (x + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::East)
-				&& !grid_[y][x + 1].HasExit(Direction::West)) {
-				// Small chance to create hidden breakable wall between these rooms
-				if (rng.Chance(0.12f)) {
-					// Choose a material and assign a hidden HP + optional elemental weakness.
-					int baseHp = rng.NextInt(6, 14) + (currentLevel_ / 2);
-					WallMaterial mat;
-					SpellElement weakness = SpellElement::Arcane;
-					if (baseHp <= 8) {
-						mat = WallMaterial::Wood;
-						weakness = SpellElement::Fire;
-					}
-					else if (baseHp <= 14) {
-						mat = WallMaterial::Stone;
-						weakness = SpellElement::Arcane;
-					}
-					else {
-						mat = WallMaterial::Strange;
-						weakness = (rng.Chance(0.5f)) ? SpellElement::Arcane : SpellElement::Shadow;
-						// Strange materials scale harder with depth
-						baseHp += currentLevel_;
-					}
-					grid_[y][x].SetHiddenWall(Direction::East, baseHp, mat, weakness);
-					grid_[y][x + 1].SetHiddenWall(Direction::West, baseHp, mat, weakness);
-				}
-			}
-			// South
-			if (y + 1 < gridSize_ && !grid_[y][x].HasExit(Direction::South)
-				&& !grid_[y + 1][x].HasExit(Direction::North)) {
-				if (rng.Chance(0.12f)) {
-					int baseHp = rng.NextInt(6, 14) + (currentLevel_ / 2);
-					WallMaterial mat;
-					SpellElement weakness = SpellElement::Arcane;
-					if (baseHp <= 8) {
-						mat = WallMaterial::Wood;
-						weakness = SpellElement::Fire;
-					}
-					else if (baseHp <= 14) {
-						mat = WallMaterial::Stone;
-						weakness = SpellElement::Arcane;
-					}
-					else {
-						mat = WallMaterial::Strange;
-						weakness = (rng.Chance(0.5f)) ? SpellElement::Arcane : SpellElement::Shadow;
-						baseHp += currentLevel_;
-					}
-					grid_[y][x].SetHiddenWall(Direction::South, baseHp, mat, weakness);
-					grid_[y + 1][x].SetHiddenWall(Direction::North, baseHp, mat, weakness);
-				}
-			}
-		}
-	}
-
-	grid_[playerY_][playerX_].visited = true;
-	grid_[playerY_][playerX_].contentResolved = true;
-	grid_[playerY_][playerX_].outcome = RoomOutcome::EmptySearched;
+	Room& entrance = grid_[playerY_][playerX_];
+	entrance.visited = true;
+	entrance.contentResolved = true;
+	entrance.outcome = RoomOutcome::EmptySearched;
 }
 
 void Dungeon::PrintMap() const {
-	std::cout << "\n  DUNGEON MAP\n";
-	std::cout << "  @ You  ? Unknown  . Searched  x Battle  c Chest  r Rest"
-		<< "  ! Trap  ^ Disarmed  V Stairs\n\n";
-
-	// Helpers
-	auto isVisible = [&](int x, int y) -> bool {
-		if (DevMode::IsEnabled() && DevMode::RevealMapEnabled()) return true;
-		return grid_[y][x].visited;
-	};
-	auto isAdjacentToVisited = [&](int x, int y) -> bool {
-		const int dx[4] = { 0, 1, 0, -1 };
-		const int dy[4] = { -1, 0, 1, 0 };
-		for (int i = 0; i < 4; ++i) {
-			int nx = x + dx[i], ny = y + dy[i];
-			if (nx >= 0 && nx < gridSize_ && ny >= 0 && ny < gridSize_) {
-				if (grid_[ny][nx].visited) return true;
-			}
-		}
-		return false;
-	};
-
-	// Compute vertical cropping: show only explored rows plus a 1-row margin.
-	int minY = gridSize_, maxY = -1;
-	int minX = gridSize_, maxX = -1;
-	for (int y = 0; y < gridSize_; ++y) {
-		for (int x = 0; x < gridSize_; ++x) {
-			if (grid_[y][x].visited) {
-				minY = std::min(minY, y);
-				maxY = std::max(maxY, y);
-				minX = std::min(minX, x);
-				maxX = std::max(maxX, x);
-			}
+	GeneratedFloorTopology view;
+	view.grid = grid_;
+	view.size = gridSize_;
+	for (int y = 0; y < gridSize_; ++y) for (int x = 0; x < gridSize_; ++x) {
+		if (grid_[y][x].content == RoomContent::Staircase) {
+			view.stairsX = x;
+			view.stairsY = y;
 		}
 	}
-
-	// Nothing visited yet -> small window around player
-	if (maxY == -1) {
-		minY = std::max(0, playerY_ - 1);
-		maxY = std::min(gridSize_ - 1, playerY_ + 1);
-		minX = std::max(0, playerX_ - 1);
-		maxX = std::min(gridSize_ - 1, playerX_ + 1);
-	}
-	// Add 1-cell margin, clamp
-	minY = std::max(0, minY - 1);
-	maxY = std::min(gridSize_ - 1, maxY + 1);
-	minX = std::max(0, minX - 1);
-	maxX = std::min(gridSize_ - 1, maxX + 1);
-
-	// Iterate rows in cropped range
-	for (int y = minY; y <= maxY; ++y) {
-		// Top border line for this row
-		std::cout << "  ";
-		bool anyPlus = false;
-		std::string topLine;
-		for (int x = minX; x <= maxX; ++x) {
-			bool vis = isVisible(x, y);
-			bool visAbove = (y > 0 && isVisible(x, y - 1));
-
-			if (vis || visAbove) {
-				anyPlus = true;
-				topLine += "+";
-				// Only show a clear connector if both rooms (this and above) are visible
-				if (grid_[y][x].HasExit(Direction::North) && vis && visAbove)
-					topLine += "  ";
-				else
-					topLine += "--";
-			}
-			else {
-				// Hide completely (preserve spacing)
-				topLine += "   ";
-			}
-		}
-		topLine += anyPlus ? "+" : " ";
-		std::cout << topLine << "\n";
-
-		// Middle line: verticals + room contents
-		std::cout << "  ";
-		for (int x = minX; x <= maxX; ++x) {
-			bool vis = isVisible(x, y);
-			bool visLeft = (x > 0 && isVisible(x - 1, y));
-
-			// Vertical border: only render when either side is visible; actual opening shown only if both visible
-			if (vis || visLeft) {
-				if (grid_[y][x].HasExit(Direction::West) && vis && visLeft)
-					std::cout << " ";
-				else
-					std::cout << "|";
-			}
-			else {
-				std::cout << " ";
-			}
-
-			// Room content / marker
-			if (x == playerX_ && y == playerY_)
-				std::cout << "@ ";
-			else if (vis) {
-				const Room& room = grid_[y][x];
-				char marker = ' ';
-				if (room.content == RoomContent::Staircase) marker = 'V';
-				else {
-					switch (room.outcome) {
-					case RoomOutcome::EnemyDefeated: marker = 'x'; break;
-					case RoomOutcome::ChestOpened: marker = 'c'; break;
-					case RoomOutcome::Rested: marker = 'r'; break;
-					case RoomOutcome::TrapTriggered: marker = '!'; break;
-					case RoomOutcome::TrapDisarmed: marker = '^'; break;
-					case RoomOutcome::EmptySearched: marker = '.'; break;
-					case RoomOutcome::Unresolved: marker = ' '; break;
-					}
-				}
-				std::cout << marker << " ";
-			}
-			else if (isAdjacentToVisited(x, y)) {
-				// Adjacent to a visited room => show an unknown marker
-				std::cout << "? ";
-			}
-			else {
-				// Completely hidden
-				std::cout << "  ";
-			}
-		}
-
-		// Rightmost border for the row
-		bool anyRight = isVisible(maxX, y) || (maxX > minX && isVisible(maxX - 1, y));
-		std::cout << (anyRight ? "|\n" : " \n");
-	}
-
-	// Bottom border for the cropped area
-	std::cout << "  ";
-	for (int x = minX; x <= maxX; ++x) {
-		if (isVisible(x, maxY)) {
-			std::cout << "+--";
-		}
-		else {
-			std::cout << "   ";
-		}
-	}
-	std::cout << "+\n\n";
+	std::cout << "\n  DUNGEON MAP\n"
+		<< "  @ You  o Revealed  . Searched  x Battle  c Chest  r Rest"
+		<< "  ! Trap  ^ Disarmed  V Stairs\n\n"
+		<< DungeonTopology::RenderKnowledge(view, playerX_, playerY_,
+			DevMode::IsEnabled() && DevMode::RevealMapEnabled()) << "\n";
 }
 
 bool Dungeon::HandleCombat(Player& player) {
@@ -348,7 +108,7 @@ bool Dungeon::HandleCombat(Player& player) {
 	}
 	MusicSystem::Play(MusicSystem::Scene::Combat);
 	const bool won = CombatSystem::ResolveCombat(
-		player, enemies, seenEnemyTypes_, gameStats_, bestiary_);
+		player, enemies, seenEnemyTypes_, gameStats_, ActiveBestiary());
 	if (player.IsAlive()) MusicSystem::Play(MusicSystem::Scene::Exploration);
 	return won;
 }
@@ -360,22 +120,35 @@ void Dungeon::HandleChest(Player& player) {
 	gameStats_.chestsOpened++;
 	Console::PrintSlow("  You find a chest and pry it open...");
 
-	if (roll <= 30) {
+	if (roll <= 25) {
 		Item potion = (currentLevel_ >= 5) ? MakeLargeHealthPotion() : MakeHealthPotion();
 		player.GetInventory().AddItem(potion);
 		Console::PrintSlow("  Found: " + potion.name + "!");
 	}
-	else if (roll <= 55) {
+	else if (roll <= 45) {
 		Item potion = (currentLevel_ >= 5) ? MakeLargeManaPotion() : MakeManaPotion();
 		player.GetInventory().AddItem(potion);
 		Console::PrintSlow("  Found: " + potion.name + "!");
 	}
-	else if (roll <= 80) {
+	else if (roll <= 55) {
 		Item hp = MakeHealthPotion();
 		Item mp = MakeManaPotion();
 		player.GetInventory().AddItem(hp);
 		player.GetInventory().AddItem(mp);
 		Console::PrintSlow("  Jackpot! Found: " + hp.name + " and " + mp.name + "!");
+	}
+	else if (roll <= 90) {
+		const LootContext context{
+			profile_ ? profile_->GetLegacyRank() : 1,
+			player.GetLevel()
+		};
+		Console::PrintSlow("  Inside lies a piece of equipment.");
+		if (EquipmentMenu::Offer(player,
+			LootGenerator::GenerateEquipment(context, rng))) {
+			Console::PrintSlow("  Equipped.");
+		} else {
+			Console::PrintSlow("  You leave it behind.");
+		}
 	}
 	else {
 		Console::PrintSlow("  The chest is empty. How disappointing.");
@@ -384,94 +157,79 @@ void Dungeon::HandleChest(Player& player) {
 
 void Dungeon::HandleRest(Player& player) {
 	Console::PrintSlow("  You find a quiet alcove. What do you do?");
-	std::cout << "\n";
-	std::cout << "    1. Rest (restore HP and Mana)\n";
-
-	bool canTrain = player.CanTrain();
-	if (canTrain)
-		std::cout << "    2. Train (permanent +1 stat, " << player.GetTrainingPoints() << "/3 used)\n";
-	else
-		std::cout << "    2. Train (MAXED OUT - 3/3)\n";
-
-	std::cout << "    3. Sharpen weapon (bonus physical damage for next few attacks)\n";
-	std::cout << "    4. Study the arcane (bonus spell damage for next few casts)\n";
-	std::cout << "  > ";
-
-	int choice = 0;
-	std::cin >> choice;
-	while (std::cin.fail() || choice < 1 || choice > 4) {
-		std::cin.clear();
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		std::cout << "  Invalid. Enter 1-4: ";
+	RestSite site;
+	while (!site.IsConsumed()) {
+		std::cout << "\n    1. Rest (restore HP and Mana)\n"
+			<< "    2. Train (+1 STR, SPD, or INT)\n"
+			<< "    3. Sharpen equipped weapon (+1 weapon rank)\n"
+			<< "    4. Improve equipped apparel (+1 item rank)\n  > ";
+		int choice = 0;
 		std::cin >> choice;
-	}
-
-	static RNG rng;
-
-	switch (choice) {
-	case 1: {
-		// Rest: restore HP and Mana
-		int hpRestore = 5 + currentLevel_;
-		int manaRestore = 3 + currentLevel_ / 2;
-		player.Heal(hpRestore);
-		player.RestoreMana(manaRestore);
-		Console::PrintSlow("  You rest and recover.");
-		Console::PrintSlow("  Restored " + std::to_string(hpRestore) + " HP and "
-			+ std::to_string(manaRestore) + " Mana.");
-		break;
-	}
-	case 2: {
-		// Train: permanent stat boost (capped)
-		if (!canTrain) {
-			Console::PrintSlow("  You've trained as much as your body allows (3/3).");
-			Console::PrintSlow("  You rest instead.");
-			int hpRestore = 5 + currentLevel_;
-			int manaRestore = 3 + currentLevel_ / 2;
-			player.Heal(hpRestore);
-			player.RestoreMana(manaRestore);
-			Console::PrintSlow("  Restored " + std::to_string(hpRestore) + " HP and "
-				+ std::to_string(manaRestore) + " Mana.");
-			break;
-		}
-		std::cout << "  Choose a stat to train:\n";
-		std::cout << "    1. Health (+5 max HP)\n";
-		std::cout << "    2. Attack (+1 ATK)\n";
-		std::cout << "    3. Speed  (+1 SPD)\n";
-		std::cout << "    4. Intelligence (+1 INT, +3 max Mana)\n";
-		std::cout << "  > ";
-		int stat = 0;
-		std::cin >> stat;
-		while (std::cin.fail() || stat < 1 || stat > 4) {
+		if (std::cin.fail() || choice < 1 || choice > 4) {
 			std::cin.clear();
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			std::cout << "  Invalid. Enter 1-4: ";
-			std::cin >> stat;
+			Console::PrintSlow("  Invalid. Enter 1-4.");
+			continue;
 		}
-		player.TrainStat(stat);
-		Console::PrintSlow("  You skip rest to push yourself. Training complete.");
-		player.PrintStatus();
-		break;
-	}
-	case 3: {
-		// Sharpen weapon: temporary physical attack buff
-		int bonus = rng.NextInt(2, 5);
-		int hits = rng.NextInt(3, 7);
-		player.ApplyAttackBuff(bonus, hits, false);
-		Console::PrintSlow("  You sharpen your weapon on the stone walls.");
-		Console::PrintSlow("  +" + std::to_string(bonus)
-			+ " physical damage for the next " + std::to_string(hits) + " attacks!");
-		break;
-	}
-	case 4: {
-		// Study the arcane: temporary spell damage buff
-		int bonus = rng.NextInt(2, 5);
-		int hits = rng.NextInt(3, 7);
-		player.ApplyAttackBuff(bonus, hits, true);
-		Console::PrintSlow("  You meditate and focus your magical energy.");
-		Console::PrintSlow("  +" + std::to_string(bonus)
-			+ " spell damage for the next " + std::to_string(hits) + " casts!");
-		break;
-	}
+
+		if (choice == 1) {
+			site.Use(player, RestAction::Rest, currentLevel_);
+			Console::PrintSlow("  You rest and recover " + std::to_string(5 + currentLevel_)
+				+ " HP and " + std::to_string(3 + currentLevel_ / 2) + " Mana.");
+		}
+		else if (choice == 2) {
+			std::cout << "  Choose a stat:\n    1. Strength\n    2. Speed\n"
+				<< "    3. Intelligence\n  > ";
+			int stat = 0;
+			std::cin >> stat;
+			if (std::cin.fail() || stat < 1 || stat > 3) {
+				std::cin.clear();
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				Console::PrintSlow("  No training is consumed. Choose again.");
+				continue;
+			}
+			const RestAction action = stat == 1 ? RestAction::TrainStrength
+				: stat == 2 ? RestAction::TrainSpeed : RestAction::TrainIntelligence;
+			site.Use(player, action, currentLevel_);
+		}
+		else if (choice == 3) {
+			if (!site.Use(player, RestAction::SharpenWeapon, currentLevel_)) {
+				Console::PrintSlow("  You have no weapon to sharpen. Choose another action.");
+				continue;
+			}
+			Console::PrintSlow("  The weapon's edge improves permanently for this run.");
+			EquipmentMenu::PrintLoadout(player);
+		}
+		else {
+			std::vector<ApparelSlot> equippedSlots;
+			for (ApparelSlot slot : {ApparelSlot::Head, ApparelSlot::Hands,
+				ApparelSlot::Torso, ApparelSlot::Legs, ApparelSlot::Feet}) {
+				if (player.GetEquipment().GetApparel(slot)) equippedSlots.push_back(slot);
+			}
+			if (equippedSlots.empty()) {
+				Console::PrintSlow("  You have no apparel to improve. Choose another action.");
+				continue;
+			}
+			std::cout << "  Choose apparel:\n";
+			for (std::size_t i = 0; i < equippedSlots.size(); ++i) {
+				std::cout << "    " << i + 1 << ". "
+					<< player.GetEquipment().GetApparel(equippedSlots[i])->GetDisplayName() << "\n";
+			}
+			std::cout << "  > ";
+			int apparelChoice = 0;
+			std::cin >> apparelChoice;
+			if (std::cin.fail() || apparelChoice < 1
+				|| apparelChoice > static_cast<int>(equippedSlots.size())) {
+				std::cin.clear();
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				Console::PrintSlow("  No improvement is consumed. Choose again.");
+				continue;
+			}
+			const ApparelSlot slot = equippedSlots[static_cast<std::size_t>(apparelChoice - 1)];
+			site.Use(player, RestAction::ImproveApparel, currentLevel_, slot);
+			Console::PrintSlow("  Improved: "
+				+ player.GetEquipment().GetApparel(slot)->GetDisplayName() + ".");
+		}
 	}
 }
 
@@ -523,11 +281,6 @@ RoomOutcome Dungeon::HandleTrap(Player& player, Room& room) {
 	}
 }
 
-void Dungeon::AwardExplorationXP(Player& player) {
-	int xp = 2 + currentLevel_;
-	player.GainXP(xp);
-}
-
 void Dungeon::HandleRoomContent(Player& player, Room& room) {
 	if (room.contentResolved) {
 		std::cout << "  This room has already been cleared.\n";
@@ -565,7 +318,6 @@ void Dungeon::HandleRoomContent(Player& player, Room& room) {
 	room.outcome = outcome;
 	if (player.IsAlive()) {
 		gameStats_.roomsExplored++;
-		AwardExplorationXP(player);
 	}
 }
 
@@ -584,13 +336,15 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 		Room& current = grid_[playerY_][playerX_];
 
 		int visitedRooms = 0;
+		int existingRooms = 0;
 		for (const auto& row : grid_) {
 			for (const Room& room : row) {
+				if (room.exists) ++existingRooms;
 				if (room.visited) ++visitedRooms;
 			}
 		}
 		ExplorationDisplay::PrintStatusPanel(currentLevel_, playerX_, playerY_,
-			visitedRooms, gridSize_ * gridSize_, current, player);
+			visitedRooms, existingRooms, current, player);
 		PrintMap();
 
 		std::cout << "\n  TRAVEL\n";
@@ -620,7 +374,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 					optNum++;
 				}
 			}
-			else if (current.HasHiddenExit(dir)) {
+			else if (current.HasHiddenExit(dir) && current.IsWallSuspected(dir)) {
 				// Hidden/breakable wall option (explicit)
 				int nx = playerX_, ny = playerY_;
 				switch (dir) {
@@ -688,7 +442,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 		// Bestiary is always available
 		std::cout << "\n  JOURNAL\n";
 		int bestiaryOpt = optNum;
-		std::cout << "    " << optNum << ". Bestiary (" << bestiary_.GetEntryCount() << " entries)\n";
+		std::cout << "    " << optNum << ". Bestiary (" << ActiveBestiary().GetEntryCount() << " entries)\n";
 		optNum++;
 		int legacyOpt = 0;
 		if (profile_) {
@@ -716,25 +470,6 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 
 		static RNG rng;
 
-		// Helper: ensure a wall entry exists between current and direction (creates one if necessary)
-		auto EnsureWallExists = [&](Room& room, Direction dir) -> void {
-			if (room.HasHiddenExit(dir)) return; // already present
-			// create implicit hidden wall with reasonable defaults (scaled by depth)
-			int baseHp = rng.NextInt(6, 12) + (currentLevel_ / 2);
-			WallMaterial mat;
-			SpellElement weakness = SpellElement::Arcane;
-			if (baseHp <= 8) { mat = WallMaterial::Wood; weakness = SpellElement::Fire; }
-			else if (baseHp <= 14) { mat = WallMaterial::Stone; weakness = SpellElement::Arcane; }
-			else { mat = WallMaterial::Strange; weakness = (rng.Chance(0.5f)) ? SpellElement::Arcane : SpellElement::Shadow; baseHp += currentLevel_; }
-			room.SetHiddenWall(dir, baseHp, mat, weakness);
-			// Also set on adjacent room for symmetry
-			int ax = playerX_, ay = playerY_;
-			switch (dir) { case Direction::North: ay--; break; case Direction::South: ay++; break; case Direction::East: ax++; break; case Direction::West: ax--; break; }
-			if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
-				grid_[ay][ax].SetHiddenWall(OppositeDirection(dir), baseHp, mat, weakness);
-			}
-		};
-
 		// Wall attack handler: does physical or magical attempts, mirrors earlier logic
 		enum class WallAttackResult { ContinueExploring, PlayerDied };
 		auto HandleWallAttack = [&](Direction dir) -> WallAttackResult {
@@ -753,6 +488,11 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 						+ " wall... solid bedrock. The dungeon itself. Unbreakable.");
 					return WallAttackResult::ContinueExploring;
 				}
+			}
+			if (!current.IsWallBreakable(dir)) {
+				Console::PrintSlow("\n  You test the " + std::string(DirectionName(dir))
+					+ " wall, but it is useless solid masonry. No route appears.");
+				return WallAttackResult::ContinueExploring;
 			}
 			Console::PrintSlow("\n  A solid barrier blocks the " + std::string(DirectionName(dir)) + ".");
 
@@ -782,25 +522,26 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 			};
 
 			if (sub == 1) {
-				EnsureWallExists(current, dir);
-				int wallHp = current.GetHiddenToughness(dir);
-				auto mat = current.GetHiddenWall(dir).material;
 				int rawRoll = rng.NextInt(1, 20);
-				int phys = player.GetATK() + rng.NextInt(1, 4) + (rawRoll == 20 ? 4 : 0);
+				const char* weaponArchetype = nullptr;
+				if (player.GetEquipment().GetWeapon()) {
+					weaponArchetype = EquipmentRules::WeaponArchetypeName(
+						player.GetEquipment().GetWeapon()->GetArchetype()).data();
+				}
+				const BreachAttempt attempt = BreachRules::ResolvePhysical(
+					current.GetHiddenWall(dir), player.GetStrength(), rawRoll, weaponArchetype);
 				Console::PrintSlow("\n  You strike the barrier with all your might...");
 				if (rawRoll == 20) Console::PrintSlow("  A perfect hit! You land a heavy blow!");
 				if (rawRoll == 1) Console::PrintSlow("  Your blow slips and hurts you!");
 
-				int effective = phys;
-				if (mat == WallMaterial::Strange) effective = phys / 4;
-
-				if (effective >= wallHp) {
+				if (attempt.outcome == BreachOutcome::Opened) {
 					// break both sides
 					current.ClearHiddenWall(dir);
 					current.SetExit(dir, true);
 					if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
 						grid_[ay][ax].ClearHiddenWall(OppositeDirection(dir));
 						grid_[ay][ax].SetExit(OppositeDirection(dir), true);
+						grid_[ay][ax].mapRevealed = true;
 					}
 					Console::PrintSlow("  Your strike breaks the barrier! A passage opens.");
 					// move player into adjacent room
@@ -811,8 +552,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 						: WallAttackResult::PlayerDied;
 				}
 				else {
-					int lost = std::max(1, effective / 2);
-					SetWallToughness(std::max(1, wallHp - lost));
+					SetWallToughness(std::max(1, attempt.remainingToughness));
 					Console::PrintSlow("  The blow chips at the barrier, but it holds.");
 					if (rawRoll == 1 || rng.Chance(0.18f)) {
 						int dmg = rng.NextInt(1, 3) + (currentLevel_ / 2);
@@ -863,40 +603,20 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 				Console::PrintSlow("  Not enough mana to cast that.");
 				return WallAttackResult::ContinueExploring;
 			}
-			EnsureWallExists(current, dir);
-			int wallHp = current.GetHiddenToughness(dir);
-			auto mat = current.GetHiddenWall(dir).material;
-			auto weakness = current.GetHiddenWall(dir).weakness;
 			player.UseMana(manaCost);
-			int spellDamage = sp.power + player.GetIntelligence() + player.ConsumeAttackBuff(true);
+			int spellDamage = SpellRules::CalculateDamage(sp, player.GetStrength(),
+				player.GetSpeed(), player.GetIntelligence(), player.GetLevel());
+			spellDamage += player.GetSpellPowerBonus();
 
-			// If element matches weakness, amplify; Strange + correct element = insta-break
-			if (sp.element == weakness) {
-				if (mat == WallMaterial::Strange) {
-					current.ClearHiddenWall(dir);
-					current.SetExit(dir, true);
-					if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
-						grid_[ay][ax].ClearHiddenWall(OppositeDirection(dir));
-						grid_[ay][ax].SetExit(OppositeDirection(dir), true);
-					}
-					Console::PrintSlow("  Your spell resonates with the material and shatters it!");
-					switch (dir) { case Direction::North: playerY_--; break; case Direction::South: playerY_++; break; case Direction::East: playerX_++; break; case Direction::West: playerX_--; break; }
-					EnterRoom(player);
-					return player.IsAlive()
-						? WallAttackResult::ContinueExploring
-						: WallAttackResult::PlayerDied;
-				}
-				else {
-					spellDamage = static_cast<int>(spellDamage * 1.75f);
-				}
-			}
-
-			if (spellDamage >= wallHp) {
+			const BreachAttempt spellAttempt = BreachRules::ResolveSpell(
+				current.GetHiddenWall(dir), spellDamage, sp.element);
+			if (spellAttempt.outcome == BreachOutcome::Opened) {
 				current.ClearHiddenWall(dir);
 				current.SetExit(dir, true);
 				if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
 					grid_[ay][ax].ClearHiddenWall(OppositeDirection(dir));
 					grid_[ay][ax].SetExit(OppositeDirection(dir), true);
+					grid_[ay][ax].mapRevealed = true;
 				}
 				Console::PrintSlow("  Your spell damages the barrier until it collapses, revealing a passage!");
 				switch (dir) { case Direction::North: playerY_--; break; case Direction::South: playerY_++; break; case Direction::East: playerX_++; break; case Direction::West: playerX_--; break; }
@@ -906,8 +626,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 					: WallAttackResult::PlayerDied;
 			}
 			else {
-				int lost = std::max(1, spellDamage);
-				SetWallToughness(std::max(1, wallHp - lost));
+				SetWallToughness(std::max(1, spellAttempt.remainingToughness));
 				Console::PrintSlow("  The spell scorches the surface but the barrier still stands.");
 				return WallAttackResult::ContinueExploring;
 			}
@@ -990,7 +709,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 
 		// After inventory check, before descend check:
 		if (choice == bestiaryOpt) {
-			bestiary_.Print();
+			ActiveBestiary().Print();
 			continue;
 		}
 
@@ -1020,7 +739,8 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 // Take one, or walk away. Choices are permanent -- choose like it matters.
 static void OfferRelicChoice(Player& player, int floorCleared,
 	const PlayerProfile* profile) {
-	const int legacyRank = profile ? profile->GetLegacyRank() : 100;
+	const int legacyRank = profile ? profile->GetLegacyRank()
+		: PlayerProfile::MaximumLegacyRank;
 	std::vector<RelicId> pool = RelicRules::BuildEligiblePool(
 		legacyRank, floorCleared, player.GetRelics());
 	if (pool.empty()) return; // Collected everything -- a true dungeon lord
@@ -1118,9 +838,7 @@ FloorResult Dungeon::RunFloor(Player& player) {
 
 		// Show only the raw number of explored rooms (not the total explorable spaces)
 		Console::PrintSlow("  Rooms explored: " + std::to_string(visited));
-		int bonusXP = visited * 2;
-		std::cout << "  Exploration bonus: ";
-		player.GainXP(bonusXP);
+		Console::PrintSlow("  Exploration itself grants no XP; survival is reward enough.");
 
 		Console::PrintSlow("==================================");
 

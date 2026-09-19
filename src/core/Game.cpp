@@ -170,7 +170,7 @@ void Game::RunAdventure(PlayerProfile& profile) {
 	Console::PrintSlow("     Watch enemy intent. Intelligence and bestiary knowledge sharpen tells.");
 	Console::PrintSlow("     Defend to catch falling WASD cues as they cross the guard line.");
 	Console::PrintSlow("     Complete the sequence to block; perfect every cue to counter!");
-	Console::PrintSlow("     Discover new enemies to fill your Bestiary for bonus XP.");
+	Console::PrintSlow("     Encounters and inspections build lasting Bestiary knowledge.");
 	Console::PrintSlow("");
  
 	// -- Dungeon Loop --

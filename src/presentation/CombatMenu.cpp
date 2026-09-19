@@ -27,12 +27,6 @@ TurnAction ChooseAction(Player& player) {
 	while (true) {
 		TurnAction action;
 
-		const AttackBuff& buff = player.GetAttackBuff();
-		if (buff.remainingHits > 0) {
-			std::cout << "  [BUFF: +" << buff.bonusDamage
-				<< (buff.isMagical ? " spell" : " physical")
-				<< " dmg, " << buff.remainingHits << " hits left]\n";
-		}
 		const PowerBuff& powerBuff = player.GetPowerBuff();
 		if (powerBuff.remainingHits > 0) {
 			std::cout << "  [EMPOWERED: +" << powerBuff.percentBonus
@@ -52,9 +46,9 @@ TurnAction ChooseAction(Player& player) {
 		switch (choice) {
 	case 1: {
 		std::cout << "  Choose attack style:\n"
-			<< "    1. Slash  (1.0x ATK, 15% crit for 1.5x)\n"
-			<< "    2. Thrust (0.8x ATK; 1.0x + pierce vs WRONG stance, parryable by Anti-Thrust)\n"
-			<< "    3. Bash   (1.3x ATK, 15% whiff + self-damage)\n"
+			<< "    1. Slash  (1.0x STR, 15% crit for 1.5x)\n"
+			<< "    2. Thrust (0.8x STR; 1.0x + pierce vs WRONG stance, parryable by Anti-Thrust)\n"
+			<< "    3. Bash   (1.3x STR, 15% whiff + self-damage)\n"
 			<< "    0. Back\n"
 			<< "    > ";
 		int attackChoice = ReadChoice(0, 3, "    Invalid. Enter 0-3: ");
