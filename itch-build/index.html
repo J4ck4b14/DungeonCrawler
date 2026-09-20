@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Dungeon Crawler</title>
+<link rel="stylesheet" href="xterm.css">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: #0b0e0b;
+    overflow: hidden;
+  }
+  #wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+  }
+  #terminal {
+    flex: 1;
+    min-height: 0;
+  }
+  /* Subtle CRT glow */
+  .xterm {
+    text-shadow: 0 0 6px rgba(120, 255, 120, 0.35);
+  }
+  #loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #7dff7d;
+    font-family: monospace;
+    font-size: 18px;
+    background: #0b0e0b;
+    z-index: 10;
+  }
+  /* Mobile input bar: hidden on desktop, shown on touch devices */
+  #mobilebar {
+    display: none;
+    gap: 6px;
+    padding-top: 6px;
+  }
+  #mobilebar input {
+    flex: 1;
+    background: #101510;
+    color: #7dff7d;
+    border: 1px solid #2f4f2f;
+    font-family: monospace;
+    font-size: 16px;
+    padding: 8px;
+    border-radius: 4px;
+    outline: none;
+  }
+  #mobilebar button {
+    background: #1c2a1c;
+    color: #7dff7d;
+    border: 1px solid #2f4f2f;
+    font-family: monospace;
+    font-size: 16px;
+    padding: 8px 16px;
+    border-radius: 4px;
+  }
+  @media (pointer: coarse) {
+    #mobilebar { display: flex; }
+  }
+</style>
+</head>
+<body>
+<div id="loading">Loading the dungeon...</div>
+<div id="wrap">
+  <div id="terminal"></div>
+  <div id="mobilebar">
+    <input id="mobilein" type="text" autocomplete="off" autocapitalize="off"
+           spellcheck="false" placeholder="Type here and press Send">
+    <button id="mobilesend">Send</button>
+  </div>
+</div>
+
+<script src="xterm.js"></script>
+<script src="xterm-addon-fit.js"></script>
+<script>
+// ---------------- Terminal setup ----------------
+const term = new Terminal({
+  cursorBlink: true,
+  convertEol: false,
+  fontFamily: '"Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace',
+  fontSize: 16,
+  theme: {
+    background:  '#0b0e0b',
+    foreground:  '#7dff7d',
+    cursor:      '#7dff7d',
+    selectionBackground: '#245224',
+  },
+  scrollback: 5000,
+});
+const fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
+term.open(document.getElementById('terminal'));
+fitAddon.fit();
+window.addEventListener('resize', () => fitAddon.fit());
+term.focus();
+
+// ---------------- Input plumbing ----------------
+// The C++ side (via Asyncify) awaits these promises.
+
+let lineResolver = null;   // pending termReadLine promise resolver
+let keyResolver  = null;   // pending termWaitKey promise resolver
+let currentLine  = "";
+
+// Write text from C++ to the terminal
+function termWrite(text) {
+  term.write(text);
+}
+
+// C++ wants one line of input; resolves when the player presses Enter
+function termReadLine() {
+  return new Promise(resolve => {
+    currentLine = "";
+    lineResolver = resolve;
+  });
+}
+
+// C++ wants a single keypress within timeoutMs; resolves with the
+// char code, or 0 if the player was too slow. Used by the death-save QTE.
+function termWaitKey(timeoutMs) {
+  return new Promise(resolve => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (!done) { done = true; keyResolver = null; resolve(0); }
+    }, timeoutMs);
+    keyResolver = (code) => {
+      if (!done) { done = true; clearTimeout(timer); keyResolver = null; resolve(code); }
+    };
+  });
+}
+
+// Feed a full line to the game (used by mobile bar and Enter key)
+function submitLine() {
+  if (!lineResolver) return;
+  term.write("\r\n");
+  const r = lineResolver;
+  lineResolver = null;
+  r(currentLine);
+  currentLine = "";
+}
+
+// Keyboard handling through xterm
+term.onData(data => {
+  // Single-key QTE mode has priority
+  if (keyResolver) {
+    keyResolver(data.charCodeAt(0));
+    return;
+  }
+  if (!lineResolver) return; // game isn't asking for input
+
+  for (const ch of data) {
+    const code = ch.charCodeAt(0);
+    if (ch === '\r' || ch === '\n') {
+      submitLine();
+      return;
+    } else if (code === 127 || code === 8) { // backspace
+      if (currentLine.length > 0) {
+        currentLine = currentLine.slice(0, -1);
+        term.write('\b \b');
+      }
+    } else if (code >= 32) { // printable
+      currentLine += ch;
+      term.write(ch);
+    }
+  }
+});
+
+// Mobile input bar
+const mIn = document.getElementById('mobilein');
+document.getElementById('mobilesend').addEventListener('click', sendMobile);
+mIn.addEventListener('keydown', e => { if (e.key === 'Enter') sendMobile(); });
+function sendMobile() {
+  const text = mIn.value;
+  mIn.value = "";
+  if (keyResolver && text.length > 0) {
+    keyResolver(text.charCodeAt(0));
+    return;
+  }
+  if (!lineResolver) return;
+  currentLine = text;
+  term.write(text);
+  submitLine();
+}
+
+// ---------------- Load the game ----------------
+var Module = {
+  onRuntimeInitialized: function() {
+    document.getElementById('loading').style.display = 'none';
+    term.focus();
+  },
+  print: function(t) { term.write(t + "\r\n"); },
+  printErr: function(t) { console.error(t); },
+};
+</script>
+<script src="game.js"></script>
+</body>
+</html>
