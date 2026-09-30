@@ -54,6 +54,20 @@ endif()
 add_executable(DungeonCrawlerPP main.cpp)
 target_link_libraries(DungeonCrawlerPP PRIVATE DungeonGame)
 
+if(EMSCRIPTEN)
+    # itch-build/index.html expects these exact filenames.
+    set_target_properties(DungeonCrawlerPP PROPERTIES
+        OUTPUT_NAME "game"
+        SUFFIX ".js"
+    )
+
+    target_link_options(DungeonCrawlerPP PRIVATE
+        "-O3"
+        "SHELL:-sASYNCIFY"
+        "SHELL:-sALLOW_MEMORY_GROWTH=1"
+    )
+endif()
+
 if(EMSCRIPTEN AND EXISTS "${CMAKE_SOURCE_DIR}/assets/music")
     target_link_options(DungeonCrawlerPP PRIVATE
         "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/assets/music@/assets/music")
