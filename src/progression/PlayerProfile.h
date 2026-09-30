@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+// Persistent progression is deliberately separate from the run-scoped Player.
+// A profile records Legacy, unlocks, settings and Bestiary knowledge across deaths.
 struct CompletedRun {
 	int floorsCleared = 0;
 	int highestFloorReached = 1;

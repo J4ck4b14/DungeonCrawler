@@ -1,20 +1,17 @@
-// RNG.h
-// -----
-// Random number generator utility wrapping the Mersenne Twister engine.
-// Provides integer/float ranges and probability-based coin flips.
-// Can be seeded manually for reproducibility or randomly via std::random_device.
+// Thin RNG wrapper. Seeded construction is used by tests and validation reports;
+// the default constructor uses platform entropy for ordinary play.
 
 #pragma once
 #include <random>
 
 class RNG {
 public:
-	RNG();                       // Random seed via std::random_device
-	explicit RNG(unsigned int seed); // Manual seed for reproducibility
+	RNG();
+	explicit RNG(unsigned int seed);
 
-	int NextInt(int min, int max);       // Uniform random integer in [min, max]
-	float NextFloat(float min, float max); // Uniform random float in [min, max]
-	bool Chance(float probability);      // Returns true with given probability (0.0 - 1.0)
+	int NextInt(int min, int max);
+	float NextFloat(float min, float max);
+	bool Chance(float probability);
 
 private:
 	std::mt19937 engine;

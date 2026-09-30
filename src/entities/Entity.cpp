@@ -1,9 +1,5 @@
-// Entity.cpp
-// ----------
-// Implementation of the Entity base class.
-// Handles damage (halved when defending), healing (capped at max),
-// mana usage/restoration, spell learning, speed-based action calculation,
-// defense stance, and temporary attack buffs.
+// Shared state mutations for combatants. Higher-level attack, spell and reactive
+// defense rules remain in CombatSystem so Entity does not decide combat outcomes.
 
 #include "Entity.h"
 #include <algorithm>

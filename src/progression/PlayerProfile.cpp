@@ -9,6 +9,8 @@
 
 namespace {
 
+// Profile files are deliberately plain text with stable string keys. The parser
+// ignores unknown fields so additive changes can remain backwards-compatible.
 bool ParseInt(std::string_view text, int& value) {
 	if (text.empty()) return false;
 	const char* begin = text.data();
@@ -27,6 +29,8 @@ std::vector<std::string> Split(const std::string& value, char delimiter) {
 	return parts;
 }
 
+// Version 1 used a different rank curve. Migration preserves the old rank and
+// fractional progress within that rank instead of reinterpreting raw XP directly.
 int OldXPRequiredForRank(int rank) {
 	if (rank <= 1) return 0;
 	return 25 * (rank - 1) * (rank + 1);
@@ -141,6 +145,9 @@ void PlayerProfile::RefreshRankUnlocks(std::vector<RelicId>* newlyUnlocked) {
 }
 
 std::string PlayerProfile::Serialize() const {
+	// Relics serialize by stable key rather than enum value so catalogue reordering
+	// cannot corrupt an existing profile. Bestiary entries own their own version-2
+	// line format below the scalar profile fields.
 	std::ostringstream output;
 	output << "profile_version=" << CurrentVersion << '\n';
 	output << "legacy_xp=" << legacyXP_ << '\n';

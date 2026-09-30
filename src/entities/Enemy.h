@@ -1,15 +1,6 @@
-// Enemy.h
-// -------
-// Enemy entity with elemental weakness and knowledge-gated stat display.
-//
-// EnemyKnowledge levels determine how much the player can see:
-//   None        -> "???" for all stats (never seen this enemy type)
-//   Approximate -> Fuzzy values with ~20% variance (seen this type on the floor)
-//   Partial     -> Exact HP/STR/SPD (decent Inspect roll)
-//   Full        -> All stats + elemental weakness + known spells (18+ Inspect roll)
-//
-// Each enemy has a SpellElement weakness. Spells matching the weakness
-// deal 1.5x damage ("super effective").
+// Per-specimen enemy state layered on top of the shared Entity combat state.
+// EnemyKnowledge is a presentation tier supplied by inspection and the persistent
+// Bestiary; the Enemy does not decide how that knowledge was earned.
 
 #pragma once
 #include "Entity.h"
@@ -18,12 +9,13 @@
 
 #include <optional>
 
-// How much the player knows about this enemy
+// Increasing tiers reveal fuzzy core stats, exact core stats, then the full
+// specimen readout. Persistent encounters can improve the tier between runs.
 enum class EnemyKnowledge {
-	None,        // Never inspected or seen before
-	Approximate, // Seen this type before on the floor
-	Partial,     // Inspected with a decent roll
-	Full         // Inspected with 18+ roll
+	None,
+	Approximate,
+	Partial,
+	Full
 };
 
 class Enemy : public Entity {

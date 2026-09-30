@@ -53,6 +53,9 @@ DefenseCueGrade GradeCue(char expectedKey, char pressedKey, int timingErrorMs,
 std::vector<DefenseCueGrade> GradeCueInputs(const DefenseCue& cue,
 	const std::vector<DefenseInput>& inputs, int blockRadiusMs,
 	int perfectRadiusMs, int chordGraceMs) {
+	// Match each note to the closest same-lane press, then grade timing. This lets
+	// a player correct an early tap without the earlier mistake stealing the beat.
+	// Notes sharing an arrival offset also receive a small chord grace window.
 	std::vector<DefenseCueGrade> grades;
 	grades.reserve(static_cast<std::size_t>(RequiredNoteCount(cue)));
 	std::vector<bool> used(inputs.size(), false);
@@ -60,11 +63,15 @@ std::vector<DefenseCueGrade> GradeCueInputs(const DefenseCue& cue,
 
 	for (const DefenseNote& note : cue.notes) {
 		if (note.decoy) continue;
+		const int arrival = cue.fallDurationMs + note.arrivalOffsetMs;
 		int inputIndex = -1;
+		int bestTimingError = 1000000;
 		for (std::size_t i = 0; i < inputs.size(); ++i) {
-			if (!used[i] && NormalizeKey(inputs[i].key) == NormalizeKey(note.key)) {
+			if (used[i] || NormalizeKey(inputs[i].key) != NormalizeKey(note.key)) continue;
+			const int timingError = std::abs(inputs[i].pressedAtMs - arrival);
+			if (timingError < bestTimingError) {
+				bestTimingError = timingError;
 				inputIndex = static_cast<int>(i);
-				break;
 			}
 		}
 		if (inputIndex < 0) {
@@ -89,26 +96,66 @@ std::vector<DefenseCueGrade> GradeCueInputs(const DefenseCue& cue,
 			}
 		}
 
-		const int arrival = cue.fallDurationMs + note.arrivalOffsetMs;
 		grades.push_back(GradeTiming(effectivePress - arrival,
 			blockRadiusMs, perfectRadiusMs));
 	}
 
-	if (std::any_of(used.begin(), used.end(), [](bool matched) { return !matched; })
-		&& !grades.empty()) {
-		grades.front() = DefenseCueGrade::Miss;
+	// Guessing is still costly, but it no longer invalidates an otherwise good cue.
+	// Each unmatched A/W/S/D press contributes one miss to the final damage share.
+	for (bool matched : used) {
+		if (!matched) grades.push_back(DefenseCueGrade::Miss);
 	}
 	return grades;
 }
 
-DefenseResult ResolveSequence(const std::vector<DefenseCueGrade>& grades) {
-	if (grades.empty()) return DefenseResult::GuardBreak;
-	bool allPerfect = true;
+DefenseOutcome ResolveOutcome(const std::vector<DefenseCueGrade>& grades) {
+	DefenseOutcome outcome;
+	if (grades.empty()) return outcome;
+
+	int damageWeight = 0;
 	for (DefenseCueGrade grade : grades) {
-		if (grade == DefenseCueGrade::Miss) return DefenseResult::GuardBreak;
-		if (grade != DefenseCueGrade::Perfect) allPerfect = false;
+		switch (grade) {
+		case DefenseCueGrade::Perfect:
+			++outcome.perfectCount;
+			break;
+		case DefenseCueGrade::Block:
+			++outcome.blockCount;
+			damageWeight += 50;
+			break;
+		case DefenseCueGrade::Miss:
+			++outcome.missCount;
+			damageWeight += 100;
+			break;
+		}
 	}
-	return allPerfect ? DefenseResult::PerfectParry : DefenseResult::Block;
+
+	if (outcome.perfectCount == static_cast<int>(grades.size())) {
+		outcome.result = DefenseResult::PerfectParry;
+		outcome.damagePercent = 0;
+		return outcome;
+	}
+	if (outcome.missCount == static_cast<int>(grades.size())) {
+		outcome.result = DefenseResult::GuardBreak;
+		outcome.damagePercent = 100;
+		return outcome;
+	}
+
+	outcome.result = DefenseResult::Block;
+	// Round the averaged note weight upward so integer division cannot make a
+	// mixed sequence slightly stronger than the grades that produced it.
+	outcome.damagePercent = (damageWeight + static_cast<int>(grades.size()) - 1)
+		/ static_cast<int>(grades.size());
+	return outcome;
+}
+
+DefenseResult ResolveSequence(const std::vector<DefenseCueGrade>& grades) {
+	return ResolveOutcome(grades).result;
+}
+
+int DamageAfterDefense(int incomingDamage, const DefenseOutcome& outcome) {
+	incomingDamage = std::max(0, incomingDamage);
+	const int percent = std::clamp(outcome.damagePercent, 0, 100);
+	return incomingDamage * percent / 100;
 }
 
 int DamageAfterDefense(int incomingDamage, DefenseResult result) {
@@ -143,7 +190,8 @@ bool IsValidLane(char key) {
 
 bool IsValidChallenge(const DefenseChallenge& challenge) {
 	if (challenge.cues.empty() || challenge.blockRadiusMs < challenge.perfectRadiusMs
-		|| challenge.perfectRadiusMs < 0 || challenge.chordGraceMs < 0) return false;
+		|| challenge.perfectRadiusMs < 0 || challenge.chordGraceMs < 0
+		|| challenge.readyDurationMs < 0) return false;
 	for (const DefenseCue& cue : challenge.cues) {
 		if (cue.notes.empty() || cue.fallDurationMs <= 0 || cue.gapAfterMs < 0
 			|| RequiredNoteCount(cue) == 0) return false;
@@ -161,6 +209,8 @@ bool IsValidChallenge(const DefenseChallenge& challenge) {
 DefenseChallenge BuildChallenge(const TurnAction& action, const Spell* spell,
 	EnemyArchetype archetype, int enemyRank, int enemySpeed,
 	int enemyStrength, int playerSpeed, int patternVariant) {
+	// Patterns carry species identity. Rank/attributes then tighten the same pattern
+	// rather than replacing it, while player Speed earns a bounded block-window aid.
 	DefenseChallenge challenge = DefensePatterns::Build(
 		archetype, enemyRank, action, spell, patternVariant);
 	enemyRank = std::clamp(enemyRank, 1, 50);
@@ -169,18 +219,22 @@ DefenseChallenge BuildChallenge(const TurnAction& action, const Spell* spell,
 	const int strengthPressure = std::min(35, std::max(0, enemyStrength) / 4);
 
 	challenge.blockRadiusMs = std::clamp(
-		265 - speedPressure / 3 - rankPressure / 3 - strengthPressure
+		285 - speedPressure / 4 - rankPressure / 4 - strengthPressure
 			+ SpeedBlockBonusMs(playerSpeed),
 		DefenseTuning::MinimumBlockRadiusMs,
 		DefenseTuning::MaximumBlockRadiusMs);
 	challenge.perfectRadiusMs = std::clamp(
-		78 - speedPressure / 18 - rankPressure / 20,
-		DefenseTuning::MinimumPerfectRadiusMs, 78);
+		85 - speedPressure / 18 - rankPressure / 20,
+		DefenseTuning::MinimumPerfectRadiusMs, 85);
 	challenge.chordGraceMs = DefenseTuning::ChordGraceMs;
+	challenge.readyDurationMs = DefenseTuning::ReadyDurationMs;
 
 	for (DefenseCue& cue : challenge.cues) {
 		cue.fallDurationMs = std::clamp(
-			cue.fallDurationMs - speedPressure - rankPressure, 620, 1900);
+			cue.fallDurationMs - speedPressure - rankPressure,
+			DefenseTuning::MinimumFallDurationMs,
+			DefenseTuning::MaximumFallDurationMs);
+		cue.gapAfterMs = std::max(cue.gapAfterMs, DefenseTuning::MinimumGapAfterMs);
 	}
 	return challenge;
 }

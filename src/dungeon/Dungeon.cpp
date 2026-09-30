@@ -470,7 +470,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 
 		static RNG rng;
 
-		// Wall attack handler: does physical or magical attempts, mirrors earlier logic
+		// Wall attacks only interact with routes the generator already created.
 		enum class WallAttackResult { ContinueExploring, PlayerDied };
 		auto HandleWallAttack = [&](Direction dir) -> WallAttackResult {
 			// Walls on the map edge are the dungeon's bedrock: unbreakable.
@@ -496,7 +496,6 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 			}
 			Console::PrintSlow("\n  A solid barrier blocks the " + std::string(DirectionName(dir)) + ".");
 
-			// choose method
 			std::cout << "    1. Strike it physically\n";
 			std::cout << "    2. Cast a spell at it\n";
 			std::cout << "    0. Cancel\n";
@@ -509,7 +508,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 				std::cout << "  Invalid. Enter 0-2: ";
 				std::cin >> sub;
 			}
-			// Cancelling a wall attack is a normal menu action
+			// Cancelling spends no action; this is menu navigation, not an attempted breach.
 			if (sub == 0) return WallAttackResult::ContinueExploring;
 
 			int ax = playerX_, ay = playerY_;
@@ -535,7 +534,6 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 				if (rawRoll == 1) Console::PrintSlow("  Your blow slips and hurts you!");
 
 				if (attempt.outcome == BreachOutcome::Opened) {
-					// break both sides
 					current.ClearHiddenWall(dir);
 					current.SetExit(dir, true);
 					if (ax >= 0 && ax < gridSize_ && ay >= 0 && ay < gridSize_) {
@@ -544,7 +542,6 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 						grid_[ay][ax].mapRevealed = true;
 					}
 					Console::PrintSlow("  Your strike breaks the barrier! A passage opens.");
-					// move player into adjacent room
 					switch (dir) { case Direction::North: playerY_--; break; case Direction::South: playerY_++; break; case Direction::East: playerX_++; break; case Direction::West: playerX_--; break; }
 					EnterRoom(player);
 					return player.IsAlive()
@@ -571,7 +568,6 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 				}
 			}
 
-			// Cast spell at wall
 			const auto& spells = player.GetKnownSpells();
 			std::vector<int> damagingSpellIndices;
 			for (size_t i = 0; i < spells.size(); ++i) {
@@ -632,18 +628,15 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 			}
 		};
 
-		// Process chosen movement options
 		for (const auto& m : moves) {
 			if (choice == m.num) {
-				// Existing hidden-break path remains but we prefer the new attack flow:
-				// If this was a hidden-break attempt, hand off to the new wall attack flow
+				// Hidden-route menu entries use the same breach resolver as explicit wall attacks.
 				if (m.isHidden) {
 					if (HandleWallAttack(m.dir) == WallAttackResult::PlayerDied) {
 						return MovementResult::PlayerDied;
 					}
 					goto continue_loop;
 				}
-				// Normal movement along an open exit
 				switch (m.dir) {
 				case Direction::North: playerY_--; break;
 				case Direction::South: playerY_++; break;
@@ -657,9 +650,7 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 			}
 		}
 
-		// Attack wall chosen
 		if (attackWallOpt > 0 && choice == attackWallOpt) {
-			// list candidate walls (all dirs without open exit)
 			std::vector<Direction> candidates;
 			std::cout << "\n  Choose a wall to attack:\n";
 			int dirOptBase = 1;
@@ -707,7 +698,6 @@ Dungeon::MovementResult Dungeon::PromptMovement(Player& player) {
 			continue;
 		}
 
-		// After inventory check, before descend check:
 		if (choice == bestiaryOpt) {
 			ActiveBestiary().Print();
 			continue;
@@ -814,7 +804,7 @@ FloorResult Dungeon::RunFloor(Player& player) {
 	Console::PrintSlow("+======================================+");
 	Console::PrintSlow(std::string("You ") + (currentLevel_ == 1 ? "enter" : "descend to")
 		+ " floor " + std::to_string(currentLevel_) + " of the dungeon.");
-	// Removed explicit grid-size line so player stays unsure of layout.
+	// The map reports explored rooms without revealing the floor's total footprint.
 	Console::PrintSlow("Find the staircase to proceed deeper!");
 
 	Console::PrintSlow("\n-- Starting Room --");
@@ -836,7 +826,6 @@ FloorResult Dungeon::RunFloor(Player& player) {
 			for (int x = 0; x < gridSize_; ++x)
 				if (grid_[y][x].visited) visited++;
 
-		// Show only the raw number of explored rooms (not the total explorable spaces)
 		Console::PrintSlow("  Rooms explored: " + std::to_string(visited));
 		Console::PrintSlow("  Exploration itself grants no XP; survival is reward enough.");
 

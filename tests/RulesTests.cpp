@@ -364,10 +364,14 @@ void TestRoomAndDefinitions() {
 		"survey language exposes a genuinely breakable wall when skill permits");
 
 	const auto& enemies = GetEnemyDefinitions();
-	Expect(enemies.size() == 16, "all enemy definitions remain available");
+	Expect(enemies.size() == static_cast<std::size_t>(EnemyArchetype::Count),
+		"every enemy archetype has exactly one definition");
 	Expect(enemies.front().name == "Slime" && enemies.back().name == "Dragon",
 		"enemy definition ordering is preserved");
-	for (const EnemyDefinition& enemy : enemies) {
+	for (std::size_t i = 0; i < enemies.size(); ++i) {
+		const EnemyDefinition& enemy = enemies[i];
+		Expect(static_cast<std::size_t>(enemy.archetype) == i,
+			enemy.name + " definition matches its archetype table slot");
 		Expect(enemy.minimumLevel > 0, enemy.name + " has a valid minimum level");
 		Expect(enemy.minHp <= enemy.maxHp && enemy.minStrength <= enemy.maxStrength
 			&& enemy.minSpeed <= enemy.maxSpeed
@@ -1009,10 +1013,19 @@ void TestReactiveDefenseRules() {
 		{DefenseCueGrade::Perfect, DefenseCueGrade::Block})
 		== DefenseResult::Block,
 		"a complete mixed-quality sequence blocks without countering");
-	Expect(DefenseRules::ResolveSequence(
-		{DefenseCueGrade::Perfect, DefenseCueGrade::Miss})
-		== DefenseResult::GuardBreak,
-		"one missed cue makes the attack deal full damage");
+	const DefenseOutcome partialGuard = DefenseRules::ResolveOutcome(
+		{DefenseCueGrade::Perfect, DefenseCueGrade::Miss});
+	Expect(partialGuard.result == DefenseResult::Block
+		&& partialGuard.damagePercent == 50
+		&& DefenseRules::DamageAfterDefense(10, partialGuard) == 5,
+		"a missed beat only exposes its share of the attack instead of erasing good defense");
+	const DefenseOutcome strongRecovery = DefenseRules::ResolveOutcome(
+		{DefenseCueGrade::Perfect, DefenseCueGrade::Perfect,
+		 DefenseCueGrade::Perfect, DefenseCueGrade::Perfect, DefenseCueGrade::Miss});
+	Expect(strongRecovery.result == DefenseResult::Block
+		&& strongRecovery.damagePercent == 20
+		&& DefenseRules::DamageAfterDefense(10, strongRecovery) == 2,
+		"a mostly perfect guard preserves most of the player's successful defense");
 	Expect(DefenseRules::DamageAfterDefense(9, DefenseResult::GuardBreak) == 9
 		&& DefenseRules::DamageAfterDefense(9, DefenseResult::Block) == 4
 		&& DefenseRules::DamageAfterDefense(9, DefenseResult::PerfectParry) == 0,
@@ -1031,6 +1044,10 @@ void TestReactiveDefenseRules() {
 	Expect(fastSlash.cues[0].fallDurationMs < slowSlash.cues[0].fallDurationMs
 		&& fastSlash.blockRadiusMs < slowSlash.blockRadiusMs,
 		"fast high-Rank enemies increase pressure without erasing species patterns");
+	Expect(fastSlash.cues[0].fallDurationMs >= DefenseTuning::MinimumFallDurationMs
+		&& fastSlash.blockRadiusMs >= DefenseTuning::MinimumBlockRadiusMs
+		&& fastSlash.readyDurationMs >= DefenseTuning::ReadyDurationMs,
+		"even apex defense pressure preserves a human-readable reaction floor and brace beat");
 
 	DefenseCue chord;
 	chord.fallDurationMs = 1000;
@@ -1041,6 +1058,16 @@ void TestReactiveDefenseRules() {
 		&& chordGrades[0] == DefenseCueGrade::Perfect
 		&& chordGrades[1] == DefenseCueGrade::Perfect,
 		"near-simultaneous chord presses share the configured grace window");
+
+	DefenseCue correctedPress;
+	correctedPress.fallDurationMs = 1000;
+	correctedPress.notes = {{'A', {'A'}, 0}};
+	const auto correctedGrades = DefenseRules::GradeCueInputs(correctedPress,
+		{{'A', 500}, {'A', 1000}}, 220, 70, 100);
+	Expect(correctedGrades.size() == 2
+		&& correctedGrades[0] == DefenseCueGrade::Perfect
+		&& correctedGrades[1] == DefenseCueGrade::Miss,
+		"a corrected press earns the beat while the early guess remains a proportional mistake");
 
 	DefenseCue staggered;
 	staggered.fallDurationMs = 900;
@@ -1069,6 +1096,15 @@ void TestReactiveDefenseRules() {
 				1 + rank / 6, 4 + rank / 4, 4, rank % 4);
 			Expect(DefenseRules::IsValidChallenge(everyRank),
 				definition.name + " has a valid pattern at Rank "
+				+ std::to_string(rank));
+			Expect(everyRank.blockRadiusMs >= DefenseTuning::MinimumBlockRadiusMs
+				&& everyRank.readyDurationMs >= DefenseTuning::ReadyDurationMs
+				&& std::all_of(everyRank.cues.begin(), everyRank.cues.end(),
+					[](const DefenseCue& cue) {
+						return cue.fallDurationMs >= DefenseTuning::MinimumFallDurationMs
+							&& cue.gapAfterMs >= DefenseTuning::MinimumGapAfterMs;
+					}),
+				definition.name + " preserves the readable defense timing floor at Rank "
 				+ std::to_string(rank));
 		}
 		for (const DefenseCue& cue : high.cues) {

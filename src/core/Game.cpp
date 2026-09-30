@@ -89,8 +89,8 @@ void Game::Run() {
 }
 
 void Game::RunAdventure(PlayerProfile& profile) {
-	// -- Character Creation --
-	DevMode::Disable();
+	// Developer tuning is a launch-level choice. Each descent resets the values,
+	// but an explicitly enabled dev session remains enabled between runs.
 	DevMode::ResetToDefaults();
 	std::string playerName;
 	std::cout << "Enter your hero's name: ";
@@ -100,11 +100,8 @@ void Game::RunAdventure(PlayerProfile& profile) {
 	Stats playerStats = Player::AllocateStats(5);
 	Player player(playerName, playerStats);
 
-	// Developer mode auto-enable when player uses reserved name
-	if (playerName == "Dev11032001") {
-		DevMode::Enable();
-		// Provide a small interactive config so the dev can tune quickly
-		std::cout << "\n*** DEV MODE ENABLED for " << playerName << " ***\n";
+	if (DevMode::IsEnabled()) {
+		std::cout << "\n*** DEV MODE ENABLED ***\n";
 		std::cout << "Quick dev options (leave blank to keep defaults):\n";
 		std::cout << "  1) Enemy scale multiplier (current " << DevMode::GetEnemyScale() << ") e.g. 1.5\n";
 		std::cout << "  2) Trap frequency multiplier (current " << DevMode::GetTrapMultiplier() << ") e.g. 2.0\n";
@@ -116,7 +113,7 @@ void Game::RunAdventure(PlayerProfile& profile) {
 		std::string line;
 		std::getline(std::cin, line);
 		if (!line.empty()) {
-			// crude parse
+			// Accept a compact comma-separated line so repeated balance runs stay quick.
 			std::replace(line.begin(), line.end(), ',', ' ');
 			std::istringstream iss(line);
 			float enemyScale = 0.0f, trapMul = 0.0f;

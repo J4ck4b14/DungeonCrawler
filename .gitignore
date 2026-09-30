@@ -54,3 +54,9 @@ Thumbs.db
 *.swp
 *.bak
 *.old
+
+# Tooling / generated metadata
+compile_commands.json
+.idea/
+.vscode/
+itch-build/*.zip

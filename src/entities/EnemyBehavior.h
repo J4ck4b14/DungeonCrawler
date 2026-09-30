@@ -10,6 +10,8 @@
 class Enemy;
 class RNG;
 
+// Behavior profiles describe recognizable species cadence, not weighted action
+// bags. State records just enough player history for adaptive guards and feints.
 enum class BehaviorMove { Slash, Thrust, Bash, Defend, Cast, Hesitate };
 
 struct EnemyStatusTrait {

@@ -52,18 +52,33 @@ struct DefenseChallenge {
 	std::string attackLabel;
 	std::string patternLabel;
 	std::vector<DefenseCue> cues;
-	int blockRadiusMs = 220;
-	int perfectRadiusMs = 70;
-	int chordGraceMs = 65;
+	int blockRadiusMs = 260;
+	int perfectRadiusMs = 80;
+	int chordGraceMs = 100;
+	int readyDurationMs = 550;
+};
+
+// Each authored note contributes independently to the final damage. A missed
+// beat hurts, but it no longer erases the beats the player defended correctly.
+struct DefenseOutcome {
+	DefenseResult result = DefenseResult::GuardBreak;
+	int damagePercent = 100;
+	int perfectCount = 0;
+	int blockCount = 0;
+	int missCount = 0;
 };
 
 namespace DefenseTuning {
 
-inline constexpr int MinimumBlockRadiusMs = 135;
-inline constexpr int MaximumBlockRadiusMs = 300;
-inline constexpr int MinimumPerfectRadiusMs = 45;
-inline constexpr int MaximumSpeedBlockBonusMs = 45;
-inline constexpr int ChordGraceMs = 65;
+inline constexpr int MinimumBlockRadiusMs = 180;
+inline constexpr int MaximumBlockRadiusMs = 330;
+inline constexpr int MinimumPerfectRadiusMs = 60;
+inline constexpr int MaximumSpeedBlockBonusMs = 55;
+inline constexpr int ChordGraceMs = 100;
+inline constexpr int MinimumFallDurationMs = 900;
+inline constexpr int MaximumFallDurationMs = 2000;
+inline constexpr int MinimumGapAfterMs = 140;
+inline constexpr int ReadyDurationMs = 550;
 
 } // namespace DefenseTuning
 
@@ -76,7 +91,9 @@ DefenseCueGrade GradeCue(char expectedKey, char pressedKey, int timingErrorMs,
 std::vector<DefenseCueGrade> GradeCueInputs(const DefenseCue& cue,
 	const std::vector<DefenseInput>& inputs, int blockRadiusMs,
 	int perfectRadiusMs, int chordGraceMs);
+DefenseOutcome ResolveOutcome(const std::vector<DefenseCueGrade>& grades);
 DefenseResult ResolveSequence(const std::vector<DefenseCueGrade>& grades);
+int DamageAfterDefense(int incomingDamage, const DefenseOutcome& outcome);
 int DamageAfterDefense(int incomingDamage, DefenseResult result);
 
 int SpeedBlockBonusMs(int playerSpeed);

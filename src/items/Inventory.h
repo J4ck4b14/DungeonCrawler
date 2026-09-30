@@ -1,15 +1,12 @@
-// Inventory.h
-// -----------
-// Simple item container for the player. Stores consumable items (potions)
-// found in chests. Items can be listed, used (consuming them), or counted.
-//
-// UseItem() applies the item's effect directly to the provided hp/mana
-// references, then removes the item from the inventory.
+// Consumable-only inventory. Equipment is intentionally owned by EquipmentSlots,
+// so replacing gear and carrying potions remain separate decisions.
 
 #pragma once
 #include "Item.h"
-#include <vector>
+#include <algorithm>
+#include <cstddef>
 #include <iostream>
+#include <vector>
 
 class Inventory {
 public:
@@ -30,7 +27,7 @@ public:
 		}
 	}
 
-	// Returns the item and removes it from inventory. Returns nullptr-like via optional.
+	// A successful use always consumes the selected potion, even at full resource.
 	bool UseItem(size_t index, int& hp, int maxHp, int& mana, int maxMana) {
 		if (index >= items_.size()) return false;
 

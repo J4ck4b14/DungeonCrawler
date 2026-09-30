@@ -13,9 +13,9 @@ enum class IntentClarity {
 
 namespace EnemyIntent {
 
-// Knowledge (including Inspect and, later, persistent Bestiary progress), INT,
-// species readability, action type, and real commitment all contribute to the
-// quality of a tell. Exact intent is never returned for an uncommitted action.
+// Inspect results and persistent Bestiary knowledge share the same knowledge
+// tier. INT, species readability and real commitment then determine how precise
+// the tell can become. Uncommitted actions are never reported as exact.
 IntentClarity DetermineClarity(const Enemy& enemy, const TurnAction& action,
 	EnemyKnowledge knowledge, int playerIntelligence, bool committed);
 std::string Describe(const Enemy& enemy, const TurnAction& action,

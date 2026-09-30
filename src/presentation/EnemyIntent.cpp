@@ -80,7 +80,8 @@ std::string AttackPrediction(AttackStyle style) {
 }
 
 std::string HesitationHint(const Enemy& enemy) {
-	static constexpr std::array<const char*, 16> tells = {{
+	static constexpr std::array<const char*,
+		static_cast<std::size_t>(EnemyArchetype::Count)> tells = {{
 		"compresses inward, swelling before its next commitment.",
 		"darts out of reach, already searching for another opening.",
 		"holds perfectly still for one metronomic beat.",
@@ -103,7 +104,8 @@ std::string HesitationHint(const Enemy& enemy) {
 }
 
 std::string VeiledTell(const Enemy& enemy) {
-	static constexpr std::array<const char*, 16> tells = {{
+	static constexpr std::array<const char*,
+		static_cast<std::size_t>(EnemyArchetype::Count)> tells = {{
 		"compresses and shifts without revealing when it will spring.",
 		"twitches at the edge of striking distance.",
 		"settles into a rigid posture.",
@@ -139,7 +141,8 @@ int SpeciesReadability(const Enemy& enemy, const TurnAction& action,
 		return action.type == ActionType::CastSpell ? 1 : 0;
 	case EnemyArchetype::DarkMage:
 		return action.type == ActionType::Attack ? -2 : -1;
-	case EnemyArchetype::Dragon: return 0;
+	case EnemyArchetype::Dragon:
+	case EnemyArchetype::Count: return 0;
 	default: return 0;
 	}
 }
@@ -150,6 +153,9 @@ namespace EnemyIntent {
 
 IntentClarity DetermineClarity(const Enemy& enemy, const TurnAction& action,
 	EnemyKnowledge knowledge, int playerIntelligence, bool committed) {
+	// Clarity combines persistent knowledge, the current hero's INT, how readable
+	// this species is, and whether the enemy has actually committed. The final
+	// gate matters: good knowledge predicts well, but it does not become prophecy.
 	int score = static_cast<int>(knowledge);
 	if (playerIntelligence >= 4) ++score;
 	if (playerIntelligence >= 9) ++score;

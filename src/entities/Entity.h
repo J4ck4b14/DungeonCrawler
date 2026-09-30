@@ -1,19 +1,7 @@
-// Entity.h
-// --------
-// Base class for all entities (player and enemies).
-// Provides shared combat state: HP, mana, Strength, speed, intelligence,
-// defending status, defense stance, power buffs, and known spells.
-//
-// ActionType: The possible actions an entity can take each turn.
-//
-// AttackStyle: Three physical attack variants:
-//   Slash  -> 1.0x STR, 15% crit for 1.5x
-//   Thrust -> 0.8x STR normally, 1.0x if target defends (ignores defense)
-//   Bash   -> 1.3x STR, 15% chance to whiff + self-damage
-//
-// Players use reactive defense timing. DefenseStance remains shared state for
-// enemy guards, whose stance can still affect the player's attack choice.
-//
+// Shared mutable combat state for players and enemies. Attack resolution lives
+// in CombatSystem; this class owns health/mana, statuses, learned spells, guard
+// state and the small temporary buffs that both sides can use.
+
 #pragma once
 #include <string>
 #include <vector>

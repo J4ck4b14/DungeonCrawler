@@ -21,9 +21,11 @@ bool muted = false;
 Scene currentScene = Scene::None;
 bool playing = false;
 
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
 int EffectiveVolume() {
 	return muted ? 0 : volume;
 }
+#endif
 
 #ifndef __EMSCRIPTEN__
 std::filesystem::path FindTrack(Scene scene) {

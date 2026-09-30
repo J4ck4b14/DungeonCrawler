@@ -1,22 +1,6 @@
-// Relic.h
-// -------
-// Roguelike relic (boon) system.
-// Relics persist for one run. The profile controls which definitions may
-// appear, while minimum floor and rarity keep loot progression depth-aware.
-//
-// Effect hook locations:
-//   Stat relics       -> Player::GrantRelic (permanent stat mutation)
-//   Vampiric Fang     -> CombatSystem physical hit (heal 20% of dmg dealt)
-//   Thorned Carapace  -> CombatSystem when player is hit (attacker takes 3)
-//   Lucky Coin        -> CombatSystem Slash crit roll (15% -> 30%)
-//   Executioner's Edge-> CombatSystem physical dmg vs targets below 30% HP
-//   Arcane Battery    -> CombatSystem spell cast (mana cost -1, min 1)
-//   Phoenix Feather   -> Death-save QTE (+250ms reaction window)
-//   Hunter's Lens     -> CombatSystem Inspect action accounting
-//   Blood Ledger      -> CombatSystem enemy defeat handling
-//   Riposte/Aegis     -> CombatSystem reactive defense resolution
-//   Mana Prism        -> CombatSystem elemental weakness hit
-//   Last Ember        -> CombatSystem successful death save recovery
+// Run-scoped relic catalogue. Unlock eligibility belongs to PlayerProfile; the
+// relic definitions stay data-only while Player and CombatSystem apply effects at
+// the point where their triggering rule already lives.
 
 #pragma once
 #include <string>

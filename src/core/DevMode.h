@@ -1,9 +1,8 @@
 #pragma once
 
-// Simple development mode toggles and tunables.
-// Enabled automatically when the hero's name is "Dev11032001".
-//
-// Exposed as a minimal namespace so other systems can query behavior.
+// Optional runtime tuning used while testing balance and dungeon generation.
+// Native builds enable it explicitly with the --dev command-line flag; normal
+// runs never infer developer state from player data such as the hero's name.
 
 namespace DevMode {
 	void Enable();

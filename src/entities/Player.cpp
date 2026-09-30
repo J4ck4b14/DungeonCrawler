@@ -1,8 +1,5 @@
-// Player.cpp
-// ----------
-// Implementation of the Player class.
-// Handles character creation, level-up, XP, combat turn menu with
-// reactive defense state, attack style selection, and training system.
+// Player-specific progression and equipment state. Combat choices are presented
+// elsewhere; this file owns character growth, learned spells, relics and gear.
 
 #include "Player.h"
 #include "combat/CombatRules.h"

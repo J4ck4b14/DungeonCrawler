@@ -4,7 +4,7 @@
 //
 // Combat flow: actors resolve in initiative order each round.
 // Player defense is reactive: commit to Defend, then catch falling key cues.
-// A completed sequence blocks; an all-perfect sequence parries and counters.
+// Each defended beat reduces its share of the hit; an all-perfect sequence parries.
 //
 //
 // Attack style balance:
@@ -13,9 +13,10 @@
 //   Bash:   1.3x STR, 15% whiff + self-damage. High risk/reward.
 //
 // Reactive Defense:
-//   ALL PERFECT: 0 damage and an automatic counter.
-//   ALL CAUGHT:  Half damage.
-//   ANY MISS:    Full damage.
+//   PERFECT beat: contributes no damage.
+//   BLOCK beat:   contributes half damage.
+//   MISSED beat:  contributes full damage for that beat only.
+//   ALL PERFECT:  automatic counter.
 // Enemy guards retain hidden directional stances.
 //
 // Enemy intent is planned at round start. Species behavior determines whether
@@ -115,7 +116,8 @@ static bool ResolveReactiveDefense(Entity& attacker, Entity& target,
 		patternRng.NextInt(0, 3));
 	if (enemy && bestiary) bestiary->RecordBehaviorObserved(enemy->GetName(),
 		DefensePatternDiscovery(enemy->GetArchetype()));
-	const DefenseResult result = DefenseQTE::Run(challenge);
+	const DefenseOutcome defense = DefenseQTE::Run(challenge);
+	const DefenseResult result = defense.result;
 	if (runtime) runtime->defenseQteOccurred = true;
 
 	if (result == DefenseResult::PerfectParry) {
@@ -138,11 +140,12 @@ static bool ResolveReactiveDefense(Entity& attacker, Entity& target,
 	if (result == DefenseResult::Block) {
 		const bool wasDefending = player->IsDefending();
 		player->SetDefending(false);
-		player->ReceiveDamage(DefenseRules::DamageAfterDefense(damage, result));
+		player->ReceiveDamage(DefenseRules::DamageAfterDefense(damage, defense));
 		player->SetDefending(wasDefending);
 		const int damageTaken = hpBefore - player->GetHP();
 		stats.totalDamageTaken += damageTaken;
-		Console::PrintSlow("  ** BLOCK! Damage reduced to "
+		const std::string guardLabel = defense.missCount > 0 ? "PARTIAL GUARD" : "BLOCK";
+		Console::PrintSlow("  ** " + guardLabel + "! Damage reduced to "
 			+ std::to_string(damageTaken) + ". **");
 		ApplyOnHitRelics(attacker, *player, damageTaken, false);
 		if (spell) {
@@ -165,7 +168,7 @@ static bool ResolveReactiveDefense(Entity& attacker, Entity& target,
 
 	const bool wasDefending = player->IsDefending();
 	player->SetDefending(false);
-	player->ReceiveDamage(DefenseRules::DamageAfterDefense(damage, result));
+	player->ReceiveDamage(DefenseRules::DamageAfterDefense(damage, defense));
 	player->SetDefending(wasDefending);
 	const int damageTaken = hpBefore - player->GetHP();
 	stats.totalDamageTaken += damageTaken;
@@ -264,9 +267,8 @@ static void RecordEnemyDefeat(Player& player, const Enemy& enemy,
 	}
 }
 
-// ---- Execute a single action ----
-// Now takes a Bestiary* so we can record weakness discoveries in combat
-
+// Resolve one already-selected action. Optional encounter context is passed in
+// only for effects that need to update persistent knowledge or other enemies.
 static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& action,
 	GameStats& stats, Enemy* enemyTarget, bool isPlayer, Bestiary* bestiary = nullptr,
 	CombatRuntime* runtime = nullptr, std::vector<Enemy>* encounter = nullptr) {
@@ -477,7 +479,7 @@ static void ExecuteAction(Entity& actor, Entity& target, const TurnAction& actio
 		actor.SetDefending(true);
 		if (isPlayer) {
 			Console::PrintSlow("  " + actor.GetName()
-				+ " enters a reactive guard. Watch the timing line!");
+				+ " enters a reactive guard. Read the lane and catch the impact!");
 		}
 		else {
 			actor.SetDefenseStance(action.defenseStance);

@@ -1,3 +1,6 @@
+// Authored reactive-defense motifs by enemy species. Rhythm carries most of the
+// identity; only a few species bend visibility or lane movement as a readable trick.
+
 #include "DefensePatterns.h"
 
 #include "Spell.h"
@@ -33,11 +36,14 @@ char RotateLane(char lane, int amount) {
 	return lanes[(index + amount) % 4];
 }
 
-void RotatePattern(DefenseChallenge& challenge, int amount) {
-	amount = ((amount % 4) + 4) % 4;
-	if (amount == 0) return;
-	for (DefenseCue& cue : challenge.cues) {
-		for (DefenseNote& note : cue.notes) {
+void VaryCueLanes(DefenseChallenge& challenge, int variant) {
+	// Vary each beat independently so the player learns an enemy's rhythm rather
+	// than memorising one fixed A/W/S/D sequence. Notes inside a chord rotate
+	// together, preserving their authored relationship and any special motion path.
+	for (std::size_t cueIndex = 0; cueIndex < challenge.cues.size(); ++cueIndex) {
+		const int amount = ((variant + static_cast<int>(cueIndex)) % 4 + 4) % 4;
+		if (amount == 0) continue;
+		for (DefenseNote& note : challenge.cues[cueIndex].notes) {
 			note.key = RotateLane(note.key, amount);
 			for (char& lane : note.lanePath) lane = RotateLane(lane, amount);
 		}
@@ -101,7 +107,7 @@ DefenseChallenge Build(EnemyArchetype archetype, int enemyRank,
 		challenge.patternLabel = "Sticky, irregular descent";
 		challenge.cues = {
 			Beat({Note('A')}, 1570, 430),
-			Beat({Note('S', {'W', 'W', 'S'})}, 1390, 610)};
+			Beat({Note('S')}, 1390, 610)};
 		AddRankMotifs(challenge, tier,
 			Beat({Note('D')}, 1510, 330), Beat({Note('W')}, 1280, 540),
 			Beat({Note('A'), Note('S')}, 1430, 420));
@@ -110,11 +116,11 @@ DefenseChallenge Build(EnemyArchetype archetype, int enemyRank,
 	case EnemyArchetype::Rat:
 		challenge.patternLabel = "Sudden isolated darts";
 		challenge.cues = {
-			Beat({Note('D', {'S', 'D'})}, 900, 145),
+			Beat({Note('D')}, 900, 145),
 			Beat({Note('A')}, 760, 250)};
 		AddRankMotifs(challenge, tier,
 			Beat({Note('W')}, 720, 120), Beat({Note('D')}, 680, 180),
-			Beat({Note('S', {'D', 'S'})}, 650, 110));
+			Beat({Note('S')}, 650, 110));
 		break;
 
 	case EnemyArchetype::Skeleton:
@@ -124,7 +130,6 @@ DefenseChallenge Build(EnemyArchetype archetype, int enemyRank,
 		AddRankMotifs(challenge, tier,
 			Beat({Note('A')}, 1190, 280), Beat({Note('W')}, 1190, 280),
 			Beat({Note('A'), Note('W')}, 1240, 300));
-		patternVariant = 0;
 		break;
 
 	case EnemyArchetype::Spider:
@@ -141,24 +146,24 @@ DefenseChallenge Build(EnemyArchetype archetype, int enemyRank,
 	case EnemyArchetype::Goblin:
 		challenge.patternLabel = "Dirty feints and uneven release";
 		challenge.cues = {
-			Beat({Note('D', {'A', 'W'}, 0, DefenseCueVisibility::Late, true),
-				Note('S', {'W', 'S'}, 130, DefenseCueVisibility::Late)}, 1120, 390),
+			Beat({Note('D', {}, 0, DefenseCueVisibility::Late, true),
+				Note('S', {}, 130, DefenseCueVisibility::Late)}, 1120, 390),
 			Beat({Note('A')}, 870, 115)};
 		AddRankMotifs(challenge, tier,
-			Beat({Note('W', {'D', 'S'}, 0, DefenseCueVisibility::Late, true), Note('D')}, 910, 300),
-			Beat({Note('W'), Note('S', {'D', 'S'}, 95)}, 900, 130),
+			Beat({Note('W', {}, 0, DefenseCueVisibility::Late, true), Note('D')}, 910, 300),
+			Beat({Note('W'), Note('S', {}, 95)}, 900, 130),
 			Beat({Note('A', {}, 0, DefenseCueVisibility::Late)}, 720, 260));
 		break;
 
 	case EnemyArchetype::Bandit:
 		challenge.patternLabel = "Measured duelist's feint";
 		challenge.cues = {
-			Beat({Note('A', {'D', 'S'}, 0, DefenseCueVisibility::Normal, true),
-				Note('W', {'S', 'W'}, 105)}, 1120, 270),
-			Beat({Note('D', {'A', 'W', 'S', 'D'})}, 980, 210)};
+			Beat({Note('A', {}, 0, DefenseCueVisibility::Normal, true),
+				Note('W', {}, 105)}, 1120, 270),
+			Beat({Note('D')}, 980, 210)};
 		AddRankMotifs(challenge, tier,
 			Beat({Note('S')}, 930, 185), Beat({Note('A'), Note('D')}, 1050, 240),
-			Beat({Note('W', {'D', 'S', 'W'})}, 850, 170));
+			Beat({Note('W')}, 850, 170));
 		break;
 
 	case EnemyArchetype::Orc:
@@ -174,11 +179,11 @@ DefenseChallenge Build(EnemyArchetype archetype, int enemyRank,
 		challenge.patternLabel = "Intermittent spectral pulse";
 		challenge.cues = {
 			Beat({Note('W', {}, 0, DefenseCueVisibility::Flicker)}, 1260, 350),
-			Beat({Note('D', {'S', 'D'}, 0, DefenseCueVisibility::Flicker)}, 1130, 320)};
+			Beat({Note('D', {}, 0, DefenseCueVisibility::Flicker)}, 1130, 320)};
 		AddRankMotifs(challenge, tier,
 			Beat({Note('A', {}, 0, DefenseCueVisibility::Flicker)}, 1070, 260),
 			Beat({Note('W'), Note('S', {}, 0, DefenseCueVisibility::Flicker)}, 1170, 300),
-			Beat({Note('D', {'A', 'W', 'S', 'D'}, 0, DefenseCueVisibility::Flicker)}, 960, 240));
+			Beat({Note('D', {}, 0, DefenseCueVisibility::Flicker)}, 960, 240));
 		break;
 
 	case EnemyArchetype::Witch:
@@ -269,9 +274,12 @@ DefenseChallenge Build(EnemyArchetype archetype, int enemyRank,
 			Beat({Note('W', {'D', 'S', 'W'}), Note('S')}, 940, 150),
 			Beat({Note('A'), Note('W'), Note('S'), Note('D')}, 1120, 240));
 		break;
+
+	case EnemyArchetype::Count:
+		break;
 	}
 
-	RotatePattern(challenge, patternVariant);
+	VaryCueLanes(challenge, patternVariant);
 	ApplyAttackShape(challenge, action, spell);
 	return challenge;
 }

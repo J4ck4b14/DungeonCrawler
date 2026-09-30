@@ -9,7 +9,11 @@
 namespace {
 using Move = BehaviorMove;
 
-const std::array<EnemyBehaviorProfile, 16> Profiles = {{
+// Profile order is part of the data contract: each slot maps directly to the
+// matching EnemyArchetype value. Count keeps additions from silently indexing
+// the wrong behavior profile.
+constexpr std::size_t kArchetypeCount = static_cast<std::size_t>(EnemyArchetype::Count);
+const std::array<EnemyBehaviorProfile, kArchetypeCount> Profiles = {{
 	{{Move::Hesitate, Move::Bash, Move::Slash}, .20, false, std::nullopt, 0, 1, {.45,.20,.50,.15}},
 	{{Move::Thrust, Move::Thrust, Move::Hesitate, Move::Slash}, .10, false, std::nullopt, 0, 1, {.25,.15,.40,.25}},
 	{{Move::Slash, Move::Slash, Move::Defend}, .00, false, std::nullopt, 0, 1, {.70,.40,.75,.02}},
@@ -31,6 +35,7 @@ const std::array<EnemyBehaviorProfile, 16> Profiles = {{
 	{{Move::Cast, Move::Bash, Move::Cast, Move::Defend, Move::Cast}, .08, true,
 		EnemyStatusTrait{StatusType::Burn, .18, .004, .45, 18}, 0, 1, {.58,.62,.55,.12}},
 }};
+static_assert(Profiles.size() == kArchetypeCount);
 
 bool ActionsMatch(const TurnAction& left, const TurnAction& right) {
 	if (left.type != right.type) return false;
@@ -102,6 +107,10 @@ const EnemyBehaviorProfile& Profile(EnemyArchetype archetype) {
 
 TurnAction Decide(const Enemy& enemy, EnemyBehaviorState& state, RNG& rng) {
 	const EnemyBehaviorProfile& profile = Profile(enemy.GetArchetype());
+
+	// Species follow a recognizable rhythm rather than rolling every action from
+	// scratch. Irregularity occasionally skips ahead, preserving identity while
+	// preventing the cadence from becoming a solved sequence.
 	int rhythmIndex = state.decisionsMade % static_cast<int>(profile.rhythm.size());
 	if (profile.irregularity > 0.0
 		&& rng.Chance(static_cast<float>(profile.irregularity))) {

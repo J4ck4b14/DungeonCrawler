@@ -4,6 +4,6 @@
 
 namespace DefenseQTE {
 
-DefenseResult Run(const DefenseChallenge& challenge);
+DefenseOutcome Run(const DefenseChallenge& challenge);
 
 } // namespace DefenseQTE

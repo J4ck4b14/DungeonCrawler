@@ -16,10 +16,13 @@
 
 namespace {
 
+// Rendering is intentionally separate from grading: the QTE records key/time
+// samples, while DefenseRules decides what those samples mean. This keeps the
+// timing model testable without a terminal or real-time sleeps.
 constexpr int kInputPollMs = 8;
 constexpr int kFrameIntervalMs = 32;
-constexpr int kFallRows = 10;
-constexpr std::size_t kFrameWidth = 70;
+constexpr int kFallRows = 12;
+constexpr std::size_t kFrameWidth = 74;
 constexpr char kLanes[] = {'A', 'W', 'S', 'D'};
 
 void WriteFrameLine(const std::string& text = {}) {
@@ -71,10 +74,10 @@ bool IsVisible(const DefenseCue& cue, const DefenseNote& note,
 	if (note.decoy) return progress < .68;
 	switch (note.visibility) {
 	case DefenseCueVisibility::Normal: return true;
-	case DefenseCueVisibility::Late: return progress >= .45;
+	case DefenseCueVisibility::Late: return progress >= .38;
 	case DefenseCueVisibility::Flicker:
 		return std::abs(timingError) <= blockRadiusMs
-			|| (elapsedMs / 145) % 2 == 0;
+			|| (elapsedMs / 165) % 2 == 0;
 	case DefenseCueVisibility::Sparse:
 		return row % 2 == 0 || std::abs(timingError) <= blockRadiusMs;
 	}
@@ -84,9 +87,9 @@ bool IsVisible(const DefenseCue& cue, const DefenseNote& note,
 std::string LaneRow(const std::array<char, 4>& markers) {
 	std::string line;
 	for (char marker : markers) {
-		line += "|  ";
+		line += "|   ";
 		line += marker == 0 ? ' ' : marker;
-		line += "  | ";
+		line += "   | ";
 	}
 	return line;
 }
@@ -101,10 +104,35 @@ std::string TimingHint(const DefenseCue& cue, int elapsedMs,
 	}
 	const DefenseCueGrade band = DefenseRules::GradeTiming(nearestError,
 		challenge.blockRadiusMs, challenge.perfectRadiusMs);
-	if (band == DefenseCueGrade::Perfect) return ">>> PERFECT WINDOW <<<";
+	if (band == DefenseCueGrade::Perfect) return ">>> GUARD NOW <<<";
 	if (band == DefenseCueGrade::Block)
-		return nearestError < 0 ? "BLOCK WINDOW OPEN" : "LATE BLOCK WINDOW";
-	return nearestError < 0 ? "READ THE LANES" : "TOO LATE";
+		return nearestError < 0 ? "BLOCK WINDOW OPEN" : "LATE - STILL BLOCKABLE";
+	return nearestError < 0 ? "TRACK THE LETTER" : "TOO LATE";
+}
+
+bool HasChord(const DefenseChallenge& challenge) {
+	for (const DefenseCue& cue : challenge.cues) {
+		int required = 0;
+		for (const DefenseNote& note : cue.notes) required += !note.decoy;
+		if (required > 1) return true;
+	}
+	return false;
+}
+
+void RenderReady(const DefenseChallenge& challenge) {
+	TerminalDisplay::ClearImmediately();
+	WriteFrameLine("+======================== REACTIVE GUARD ========================+");
+	WriteFrameLine("  " + challenge.attackLabel + "  |  " + challenge.patternLabel);
+	WriteFrameLine();
+	WriteFrameLine("  Track the LETTER. Press that letter when it reaches GUARD.");
+	WriteFrameLine("  A wrong press costs one beat; it does not erase good defenses.");
+	if (HasChord(challenge)) {
+		WriteFrameLine("  Multiple letters together form a chord - press them together.");
+	}
+	else WriteFrameLine();
+	WriteFrameLine();
+	WriteFrameLine("                           BRACE");
+	std::cout.flush();
 }
 
 void RenderFrame(const DefenseChallenge& challenge, std::size_t cueIndex,
@@ -126,25 +154,25 @@ void RenderFrame(const DefenseChallenge& challenge, std::size_t cueIndex,
 		}
 		else if (timingError < -challenge.perfectRadiusMs) {
 			char& marker = field[static_cast<std::size_t>(row)][static_cast<std::size_t>(lane)];
-			marker = marker == 0 ? 'o' : '*';
+			const char cueMarker = note.decoy ? '?' : NormalizeKey(note.key);
+			marker = marker == 0 ? cueMarker : '*';
 		}
 	}
 
 	TerminalDisplay::MoveCursorHome();
-	WriteFrameLine("+====================== REACTIVE GUARD ======================+");
+	WriteFrameLine("+======================== REACTIVE GUARD ========================+");
 	WriteFrameLine("  " + challenge.attackLabel + "  |  " + challenge.patternLabel);
 	WriteFrameLine("  Beat " + std::to_string(cueIndex + 1) + "/"
 		+ std::to_string(challenge.cues.size())
-		+ "  |  Press A/W/S/D as cues touch the guard line.");
-	WriteFrameLine("  Chords accept " + std::to_string(challenge.chordGraceMs)
-		+ " ms between near-simultaneous keys.");
+		+ "  |  Press the shown LETTER when it reaches GUARD.");
+	WriteFrameLine("          A         W         S         D");
 	for (const auto& row : field) WriteFrameLine(LaneRow(row));
 
 	std::string guard;
 	for (std::size_t lane = 0; lane < 4; ++lane) {
 		guard += onGuard[lane]
-			? "[ >" + std::string(1, kLanes[lane]) + "< ] "
-			: "[  " + std::string(1, kLanes[lane]) + "  ] ";
+			? "[  >" + std::string(1, kLanes[lane]) + "<  ] "
+			: "[   " + std::string(1, kLanes[lane]) + "   ] ";
 	}
 	WriteFrameLine(guard + "<- GUARD");
 	WriteFrameLine();
@@ -164,11 +192,14 @@ const char* GradeName(DefenseCueGrade grade) {
 DefenseCueGrade ResolveCueGrade(const std::vector<DefenseCueGrade>& grades) {
 	if (grades.empty()) return DefenseCueGrade::Miss;
 	bool allPerfect = true;
+	bool allMiss = true;
 	for (DefenseCueGrade grade : grades) {
-		if (grade == DefenseCueGrade::Miss) return DefenseCueGrade::Miss;
-		if (grade != DefenseCueGrade::Perfect) allPerfect = false;
+		allPerfect = allPerfect && grade == DefenseCueGrade::Perfect;
+		allMiss = allMiss && grade == DefenseCueGrade::Miss;
 	}
-	return allPerfect ? DefenseCueGrade::Perfect : DefenseCueGrade::Block;
+	if (allPerfect) return DefenseCueGrade::Perfect;
+	if (allMiss) return DefenseCueGrade::Miss;
+	return DefenseCueGrade::Block;
 }
 
 int LatestArrival(const DefenseCue& cue) {
@@ -179,26 +210,25 @@ int LatestArrival(const DefenseCue& cue) {
 	return result;
 }
 
-int RequiredInputCount(const DefenseCue& cue) {
-	return static_cast<int>(std::count_if(cue.notes.begin(), cue.notes.end(),
-		[](const DefenseNote& note) { return !note.decoy; }));
-}
-
 } // namespace
 
 namespace DefenseQTE {
 
-DefenseResult Run(const DefenseChallenge& challenge) {
-	if (!DefenseRules::IsValidChallenge(challenge)) return DefenseResult::GuardBreak;
+DefenseOutcome Run(const DefenseChallenge& challenge) {
+	if (!DefenseRules::IsValidChallenge(challenge)) return {};
+
+	// The cursor must come back even if the terminal input loop exits early.
 	struct CursorGuard {
 		CursorGuard() { TerminalDisplay::SetCursorVisible(false); }
 		~CursorGuard() { TerminalDisplay::SetCursorVisible(true); }
 	} cursorGuard;
 
 	TimedInput::Flush();
+	RenderReady(challenge);
+	Console::Sleep(challenge.readyDurationMs);
 	TerminalDisplay::ClearImmediately();
-	std::vector<DefenseCueGrade> sequenceGrades;
 
+	std::vector<DefenseCueGrade> sequenceGrades;
 	for (std::size_t cueIndex = 0; cueIndex < challenge.cues.size(); ++cueIndex) {
 		const DefenseCue& cue = challenge.cues[cueIndex];
 		const int deadlineMs = LatestArrival(cue) + challenge.blockRadiusMs;
@@ -221,7 +251,6 @@ DefenseResult Run(const DefenseChallenge& challenge) {
 			const int pressedAtMs = static_cast<int>(std::chrono::duration_cast<
 				std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
 			inputs.push_back({NormalizeKey(static_cast<char>(key)), pressedAtMs});
-			if (static_cast<int>(inputs.size()) >= RequiredInputCount(cue)) break;
 		}
 
 		const std::vector<DefenseCueGrade> cueGrades = DefenseRules::GradeCueInputs(
@@ -231,13 +260,15 @@ DefenseResult Run(const DefenseChallenge& challenge) {
 		const DefenseCueGrade cueGrade = ResolveCueGrade(cueGrades);
 		std::cout << "\n  " << GradeName(cueGrade) << "\n";
 		std::cout.flush();
-		Console::Sleep(cueGrade == DefenseCueGrade::Miss ? 350 : 180);
-		if (cueGrade == DefenseCueGrade::Miss) break;
+		Console::Sleep(cueGrade == DefenseCueGrade::Miss ? 260 : 160);
+
+		// A missed beat is recoverable. The next authored beat still arrives, which
+		// makes the guard read as a sequence of impacts rather than one hidden pass/fail test.
 		if (cueIndex + 1 < challenge.cues.size()) Console::Sleep(cue.gapAfterMs);
 		TimedInput::Flush();
 	}
 
-	return DefenseRules::ResolveSequence(sequenceGrades);
+	return DefenseRules::ResolveOutcome(sequenceGrades);
 }
 
 } // namespace DefenseQTE

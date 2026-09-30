@@ -2,6 +2,9 @@
 
 #include "progression/PlayerProfile.h"
 
+// Web builds use localStorage; native builds use the platform data directory.
+// Malformed profiles are preserved for diagnosis instead of being overwritten.
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -153,6 +156,8 @@ bool Save(const PlayerProfile& profile, std::string* message) {
 		if (message) *message = "Could not create the profile directory.";
 		return false;
 	}
+	// Write a sibling temporary file first so an interrupted save does not destroy
+	// the last valid profile. The replacement below is the only destructive step.
 	{
 		std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
 		if (!output) {

@@ -226,7 +226,7 @@ bool Bestiary::DeserializeEntry(const std::string& serialized,
 			return false;
 		}
 	}
-	if (values[0] < 0 || values[0] > static_cast<int>(EnemyArchetype::Dragon)
+	if (values[0] < 0 || values[0] >= static_cast<int>(EnemyArchetype::Count)
 		|| values[3] < 0 || values[3] > static_cast<int>(EnemyKnowledge::Full)
 		|| values[5] < 0 || values[5] > static_cast<int>(SpellElement::Arcane)) {
 		if (errorMessage) *errorMessage = "Out-of-range Bestiary value.";

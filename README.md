@@ -12,7 +12,7 @@ Characters are built from four core stats: **Health, Strength, Speed, and Intell
  
 You descend a procedurally generated dungeon. There is no final boss and no bottom floor — enemies grow stronger faster than you do, and eventually the dungeon forms a wall your build cannot climb. **Victory is escaping alive.** Every extra floor you descend is greed.
  
-- **Reactive combat** — commit to Defend, read species-specific four-lane A/W/S/D patterns, and catch cues at the guard line. Complete the sequence to block; perfect every cue to take no damage and counterattack.
+- **Reactive combat** — commit to Defend, read species-specific four-lane A/W/S/D rhythms, and catch each letter at the guard line. Every defended beat reduces its share of the hit; a flawless sequence takes no damage and counterattacks.
 - **Enemy groups** — deeper floors can surround you with two or three independently acting foes. The combat panel shows their stable target labels, intents, and initiative order.
 - **Equipment-driven builds** — weapons have visible Weapon Rank (WR), distinct STR/SPD/INT scaling, permanent sharpening, and up to two visible ranked enchantments. Apparel occupies five fixed slots; replacing gear is a real choice, not backpack accumulation. Loot rarity exists only behind the scenes so the game presents what an item does, not a color label.
 - **Rest-site choices** — each site is spent on one recovery, permanent weapon/apparel improvement, or uncapped STR/SPD/INT training decision.
@@ -93,6 +93,10 @@ records and the Legacy 0–50 curve; supported version-1 profiles are migrated
 while preserving their old rank and fractional progress where possible.
 
 ## Developer tuning points
+
+Native builds can start with `--dev` to open the balance/debug controls before a
+descent. Developer state is explicit and never tied to a hero name or persistent
+profile data.
 
 The deliberately asymmetric systems are centralized rather than flattened:
 weapon scaling and enchantment behavior live under `equipment/`, loot pull and

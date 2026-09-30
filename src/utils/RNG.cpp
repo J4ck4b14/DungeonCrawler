@@ -1,16 +1,12 @@
-// RNG.cpp
-// -------
-// Implementation of the RNG utility.
-
 #include "RNG.h"
 
 RNG::RNG() {
 	std::random_device rd;
-	engine = std::mt19937(rd()); // Random seed
+	engine = std::mt19937(rd());
 }
 
 RNG::RNG(unsigned int seed) {
-	engine = std::mt19937(seed); // Manual seed
+	engine = std::mt19937(seed);
 }
 
 int RNG::NextInt(int min, int max) {

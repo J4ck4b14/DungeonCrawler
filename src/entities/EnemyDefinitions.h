@@ -6,7 +6,8 @@
 
 enum class EnemyArchetype {
 	Slime, Rat, Skeleton, Spider, Goblin, Bandit, Orc, Ghost,
-	Witch, Troll, Werewolf, Vampire, DarkMage, Demon, Giant, Dragon
+	Witch, Troll, Werewolf, Vampire, DarkMage, Demon, Giant, Dragon,
+	Count
 };
 
 struct EnemyScaling {

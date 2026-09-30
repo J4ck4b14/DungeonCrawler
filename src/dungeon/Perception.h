@@ -5,11 +5,11 @@ class Player;
 
 class Perception {
 public:
-	// Roll the base d20. The caller applies the player's INT modifier.
+	// Roll the hidden base d20. The survey applies the player's INT modifier.
 	static int Roll();
 
-	// Generate a description based on the roll for what the player senses
-	// about adjacent rooms. This creates PerceptionHints that become canonical.
+	// Survey every direction once. All resulting text is remembered, but only
+	// sufficiently strong truthful hints mark adjacent content as actually known.
 	static void PerceiveFromRoom(Room& currentRoom, 
 		const std::vector<std::vector<Room>>& grid,
 		int gridSize, const Player& player);

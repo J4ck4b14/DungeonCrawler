@@ -1,21 +1,8 @@
-// Perception.cpp
-// ----------------
-// Handles the player's perception checks when surveying a room.
-// A hidden d20 + INT roll determines how much information the player
-// receives about adjacent rooms:
-//   Nat 1  -> Purposefully misleading: describes a WRONG room content
-//             with confident, convincing detail so the player trusts it.
-//   <=5    -> Vague / useless ("you see only darkness").
-//   6-10   -> Poor: knows a passage exists, nothing more.
-//   11-15  -> Medium: general vibe hints (sounds, smells, feelings).
-//   16-19  -> Good: specific, truthful descriptions. Stored as canonical.
-//   Nat 20 -> Full reveal with dramatic flavor text.
-//
-// The roll result is never shown to the player. Flavor text is chosen
-// to mask the quality -- nat 1 sounds confident, low rolls sound uncertain.
-// Canonical hints (quality >= 3) are stored on the Room so that traps
-// detected via perception can be avoided when the player enters.
-// Misleading hints from nat 1 are NOT stored as canonical reveals.
+// One hidden d20 + INT survey produces remembered hints for the four directions.
+// Low rolls stay vague, strong rolls reveal real content, and a natural 1 lies
+// confidently. The number itself is never shown, so players judge the wording
+// rather than reverse-engineering the roll. Suspicious walls are only learned
+// through a successful survey; generator truth is never exposed automatically.
 
 #include "Perception.h"
 #include "entities/Player.h"
@@ -91,12 +78,11 @@ bool TryGetAdjacentRoom(Direction direction, const Room& currentRoom,
 int Perception::Roll() {
 	static RNG rng;
 	int base = rng.NextInt(1, 20);
-	// Apply dev-mode penalty (if enabled) to the raw d20. Minimum 1.
+	// The test penalty cannot manufacture a natural 1 below the die's floor.
 	if (DevMode::IsEnabled()) {
 		base -= DevMode::GetPerceptionPenalty();
 		if (base < 1) base = 1;
 	}
-	// Roll is hidden from the player -- no output here
 	return base;
 }
 
@@ -127,26 +113,24 @@ std::string Perception::DescribeWall(Direction dir, bool unusual,
 		+ ", a continuous wall of solid stone blocks the way.";
 }
 
-// For nat-1 misleading: swap the content to something wrong
 static RoomContent MisleadingContent(RoomContent actual) {
 	static RNG rng;
-	// Pick a different content type to lie about
 	std::vector<RoomContent> lies;
 	if (actual != RoomContent::Combat)    lies.push_back(RoomContent::Combat);
 	if (actual != RoomContent::Chest)     lies.push_back(RoomContent::Chest);
 	if (actual != RoomContent::Trap)      lies.push_back(RoomContent::Trap);
 	if (actual != RoomContent::Rest)      lies.push_back(RoomContent::Rest);
 	if (actual != RoomContent::Empty)     lies.push_back(RoomContent::Empty);
-	// Intentionally don't fake staircases -- too game-breaking
+	// False staircase reads would create navigation promises the map cannot keep.
 	return lies[rng.NextInt(0, static_cast<int>(lies.size()) - 1)];
 }
 
-// Generate a description for a given content type (used for both truthful and misleading)
+// The same vocabulary is used for truthful reads and natural-1 lies so confidence
+// in the prose does not reveal whether the underlying information is reliable.
 static std::string ContentDescription(Direction dir, RoomContent content, int quality) {
 	const char* dirName = DirectionName(dir);
 
 	if (quality == 2) {
-		// Medium -- sense the general vibe
 		std::string base = std::string("To the ") + dirName + ", ";
 		switch (content) {
 		case RoomContent::Combat:    return base + "you hear faint sounds of movement.";
@@ -159,7 +143,6 @@ static std::string ContentDescription(Direction dir, RoomContent content, int qu
 	}
 
 	if (quality == 3) {
-		// Good -- more specific
 		std::string base = std::string("To the ") + dirName + ", ";
 		switch (content) {
 		case RoomContent::Combat:    return base + "you hear growling. Something alive lurks there.";
@@ -172,7 +155,6 @@ static std::string ContentDescription(Direction dir, RoomContent content, int qu
 	}
 
 	if (quality == 4) {
-		// Great -- full reveal
 		std::string base = std::string("To the ") + dirName + ", ";
 		switch (content) {
 		case RoomContent::Combat:    return base + "a creature waits in ambush -- you can see its silhouette clearly.";
@@ -184,7 +166,6 @@ static std::string ContentDescription(Direction dir, RoomContent content, int qu
 		}
 	}
 
-	// quality >= 5 (nat 20) -- omniscient, atmospheric, almost narrative
 	std::string base = std::string("To the ") + dirName + ", ";
 	switch (content) {
 	case RoomContent::Combat:
@@ -221,14 +202,11 @@ std::string Perception::DescribeDirection(Direction dir, const Room& adjacent,
 	//              2 = okay, 3 = good, 4 = great, 5 = nat20
 
 	if (rollQuality == -1) {
-		// Nat 1: purposefully misleading -- describe a WRONG content with confidence
 		RoomContent fakeContent = MisleadingContent(adjacent.content);
-		// Use quality 3 (good) descriptions so the lie sounds convincing
 		return ContentDescription(dir, fakeContent, 3);
 	}
 
 	if (rollQuality <= 0) {
-		// Very low -- vague/useless
 		std::vector<std::string> bad = {
 			std::string("To the ") + dirName + ", you hear... something? Maybe? Hard to tell.",
 			std::string("You squint ") + dirName + " but see only darkness.",
@@ -238,7 +216,6 @@ std::string Perception::DescribeDirection(Direction dir, const Room& adjacent,
 	}
 
 	if (rollQuality == 1) {
-		// Low roll -- very vague
 		std::string base = std::string("A passage leads ") + dirName + ". ";
 		if (adjacent.visited) {
 			return base + "You've been there before.";
@@ -246,7 +223,6 @@ std::string Perception::DescribeDirection(Direction dir, const Room& adjacent,
 		return base + "You can't make out much.";
 	}
 
-	// Quality 2+ uses the content description helper (truthful)
 	return ContentDescription(dir, adjacent.content, rollQuality);
 }
 
@@ -257,7 +233,6 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 
 	if (currentRoom.perceptionUsed) {
 		std::cout << "  You've already surveyed this room.\n";
-		// Re-display previous hints
 		if (!currentRoom.hints.empty()) {
 			std::cout << "\n  You recall:\n";
 			for (const auto& hint : currentRoom.hints) {
@@ -280,7 +255,6 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 	int rawRoll = Roll();
 	int total = rawRoll + player.GetIntelligence();
 
-	// Determine quality tier -- roll is HIDDEN from the player
 	int quality;
 	if (rawRoll == 1) quality = -1;           // Nat 1: misleading!
 	else if (rawRoll == 20) quality = 5;      // Nat 20: omniscient
@@ -290,12 +264,10 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 	else if (total <= 19) quality = 3;        // Good
 	else quality = 4;                         // Great (total 20+ without nat 20)
 
-	// Flavor text -- no numbers revealed
 	if (rawRoll == 20) {
 		std::cout << "\n  Your senses sharpen to a razor's edge. The dungeon reveals itself.\n\n";
 	}
 	else if (rawRoll == 1) {
-		// Say something confident so the player trusts the lies
 		std::cout << "\n  You focus intently and get a clear read on your surroundings.\n\n";
 	}
 	else if (quality >= 3) {
@@ -308,12 +280,10 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 		std::cout << "\n  You strain your senses but the dungeon is hard to read.\n\n";
 	}
 
-	// Check each direction
 	for (int d = 0; d < 4; ++d) {
 		Direction dir = static_cast<Direction>(d);
 
 		if (!currentRoom.HasExit(dir)) {
-			// Wall -- we may be looking at a hidden/breakable wall
 			int nx = currentRoom.x;
 			int ny = currentRoom.y;
 			switch (dir) {
@@ -328,8 +298,8 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 			bool breakable = false;
 			int toughness = 0;
 			if (inBounds) {
-				// Check either the current room's hidden flag in that direction (preferred)
-				// or the adjacent room's opposite hidden flag (symmetry).
+				// Hidden-wall metadata is mirrored between neighboring rooms; accept either
+				// side so perception remains robust if a caller inspects one side directly.
 				if (currentRoom.HasHiddenExit(dir)) {
 					hasHidden = true;
 					const HiddenWall& wall = currentRoom.GetHiddenWall(dir);
@@ -357,7 +327,6 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 			continue;
 		}
 
-		// Calculate adjacent coords
 		int nx = currentRoom.x;
 		int ny = currentRoom.y;
 		switch (dir) {
@@ -377,12 +346,11 @@ void Perception::PerceiveFromRoom(Room& currentRoom,
 		std::string desc = DescribeDirection(dir, adjacent, quality);
 		std::cout << "    " << desc << "\n";
 
-		// Store as canonical hint
 		PerceptionHint hint;
 		hint.direction = dir;
 		hint.description = desc;
-		// Only good+ truthful rolls actually reveal content
-		// Nat 1 misleading hints should NOT count as revealing (they're lies!)
+		// Every description is remembered; only strong truthful reads unlock the
+		// mechanical knowledge used by room resolution (for example, known traps).
 		hint.revealsContent = (quality >= 3);
 		if (hint.revealsContent) {
 			hint.revealedContent = adjacent.content;
